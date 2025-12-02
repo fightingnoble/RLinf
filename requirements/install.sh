@@ -32,8 +32,10 @@ if [ "$ENABLE_BEHAVIOR" = "true" ] && [[ "$TARGET" != "openvla-oft" ]]; then
 fi
 
 # Common dependencies
-uv venv --python=$PYTHON_VERSION
-source .venv/bin/activate
+# Activate existing conda environment
+# Initialize conda for bash script
+eval "$(conda shell.bash hook)"
+conda activate rad_zhangchg
 UV_TORCH_BACKEND=auto uv sync
 
 if [[ " ${EMBODIED_TARGET[*]} " == *" $TARGET "* ]]; then
@@ -41,10 +43,12 @@ if [[ " ${EMBODIED_TARGET[*]} " == *" $TARGET "* ]]; then
     uv pip uninstall pynvml
     bash requirements/install_embodied_deps.sh # Must be run after the above command
     mkdir -p /opt && git clone https://github.com/RLinf/LIBERO.git /opt/libero
-    echo "export PYTHONPATH=/opt/libero:$PYTHONPATH" >> .venv/bin/activate
-    echo "export NVIDIA_DRIVER_CAPABILITIES=all" >> .venv/bin/activate
-    echo "export VK_DRIVER_FILES=/etc/vulkan/icd.d/nvidia_icd.json" >> .venv/bin/activate
-    echo "export VK_ICD_FILENAMES=/etc/vulkan/icd.d/nvidia_icd.json" >> .venv/bin/activate
+    mkdir -p $CONDA_PREFIX/etc/conda/activate.d
+    echo "export PYTHONPATH=/opt/libero:\$PYTHONPATH" >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
+    echo "export NVIDIA_DRIVER_CAPABILITIES=all" >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
+    echo "export VK_DRIVER_FILES=/etc/vulkan/icd.d/nvidia_icd.json" >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
+    echo "export VK_ICD_FILENAMES=/etc/vulkan/icd.d/nvidia_icd.json" >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
+    chmod +x $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
 fi
 
 if [ "$TARGET" = "openvla" ]; then
@@ -62,7 +66,8 @@ elif [ "$TARGET" = "openvla-oft" ]; then
     fi
 elif [ "$TARGET" = "openpi" ]; then
     UV_TORCH_BACKEND=auto GIT_LFS_SKIP_SMUDGE=1 uv pip install -r requirements/openpi.txt
-    cp -r .venv/lib/python3.11/site-packages/openpi/models_pytorch/transformers_replace/* .venv/lib/python3.11/site-packages/transformers/
+    PYTHON_VER=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+    cp -r $CONDA_PREFIX/lib/python${PYTHON_VER}/site-packages/openpi/models_pytorch/transformers_replace/* $CONDA_PREFIX/lib/python${PYTHON_VER}/site-packages/transformers/
     export TOKENIZER_DIR=~/.cache/openpi/big_vision/ && mkdir -p $TOKENIZER_DIR && gsutil -m cp -r gs://big_vision/paligemma_tokenizer.model $TOKENIZER_DIR
 elif [ "$TARGET" = "reason" ]; then
     uv sync --extra sglang-vllm
@@ -71,7 +76,9 @@ elif [ "$TARGET" = "reason" ]; then
     if [ "$TEST_BUILD" != "true" ]; then
         APEX_CPP_EXT=1 APEX_CUDA_EXT=1 NVCC_APPEND_FLAGS="--threads 24" APEX_PARALLEL_BUILD=24 uv pip install -r requirements/megatron.txt --no-build-isolation
     fi
-    echo "export PYTHONPATH=/opt/Megatron-LM:$PYTHONPATH" >> .venv/bin/activate
+    mkdir -p $CONDA_PREFIX/etc/conda/activate.d
+    echo "export PYTHONPATH=/opt/Megatron-LM:\$PYTHONPATH" >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
+    chmod +x $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
 else
     echo "Unknown target: $TARGET. Supported targets are: openvla, openvla-oft, openpi, reason."
     exit 1
