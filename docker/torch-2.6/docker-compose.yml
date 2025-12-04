@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  rlinf-embodied:
+    image: rlinf:embodied
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_TARGET: embodied
+    runtime: nvidia
+    shm_size: 100g
+    network_mode: host
+    environment:
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
+    volumes:
+      # Mount pre-cloned repositories
+      - ./repos/Megatron-LM:/opt/Megatron-LM:ro
+      - ./repos/LIBERO:/opt/libero:ro
+      - ./repos/BEHAVIOR-1K:/opt/BEHAVIOR-1K:ro
+      # Mount workspace for development
+      - ../../:/workspace/RLinf
+    working_dir: /workspace/RLinf
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+  rlinf-reason:
+    image: rlinf:reason
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_TARGET: reason
+    runtime: nvidia
+    shm_size: 100g
+    network_mode: host
+    environment:
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
+    volumes:
+      # Mount pre-cloned repositories
+      - ./repos/Megatron-LM:/opt/Megatron-LM:ro
+      # Mount workspace for development
+      - ../../:/workspace/RLinf
+    working_dir: /workspace/RLinf
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
