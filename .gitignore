@@ -16,3 +16,5 @@ logs/*
 .venv
 uv.lock
 rlinf/envs/maniskill/assets
+workspace
+docker/torch-2.6/repos
