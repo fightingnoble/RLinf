@@ -13,6 +13,9 @@ TEST_BUILD=${TEST_BUILD:-0}
 SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
+# Source local install helpers
+source "$SCRIPT_DIR/install_local_utils.sh"
+
 SUPPORTED_TARGETS=("embodied" "reason")
 SUPPORTED_MODELS=("openvla" "openvla-oft" "openpi")
 SUPPORTED_ENVS=("behavior" "maniskill_libero" "metaworld")
@@ -98,7 +101,7 @@ create_and_sync_venv() {
     uv venv "$VENV_DIR" --python "$PYTHON_VERSION"
     # shellcheck disable=SC1090
     source "$VENV_DIR/bin/activate"
-    UV_TORCH_BACKEND=auto uv sync --active
+    uv_sync_wrapper --active
 }
 
 install_prebuilt_flash_attn() {
@@ -108,38 +111,18 @@ install_prebuilt_flash_attn() {
 
     # Detect Python tags
     local py_major py_minor
-    py_major=$(python - <<'EOF'
-import sys
-print(sys.version_info.major)
-EOF
-)
-    py_minor=$(python - <<'EOF'
-import sys
-print(sys.version_info.minor)
-EOF
-)
-    local py_tag="cp${py_major}${py_minor}"   # e.g. cp311
+    py_major=$(python -c 'import sys; print(sys.version_info.major)')
+    py_minor=$(python -c 'import sys; print(sys.version_info.minor)')
+    local py_tag="cp${py_major}${py_minor}"
     local abi_tag="${py_tag}"                 # we assume cpXY-cpXY ABI, adjust if needed
 
     # Detect torch version (major.minor) and strip dots, e.g. 2.6.0 -> 26
     local torch_mm
-    torch_mm=$(python - <<'EOF'
-import torch
-v = torch.__version__.split("+")[0]
-parts = v.split(".")
-print(f"{parts[0]}.{parts[1]}")
-EOF
-)
+    torch_mm=$(python -c 'import torch; v = torch.__version__.split("+")[0]; parts = v.split("."); print(f"{parts[0]}.{parts[1]}")')
 
     # Detect CUDA major, e.g. 12 from 12.4
     local cuda_major
-    cuda_major=$(python - <<'EOF'
-import torch
-from packaging.version import Version
-v = Version(torch.version.cuda)
-print(v.base_version.split(".")[0])
-EOF
-)
+    cuda_major=$(python -c 'import torch; from packaging.version import Version; v = Version(torch.version.cuda); print(v.base_version.split(".")[0])')
 
     local cu_tag="cu${cuda_major}"            # e.g. cu12
     local torch_tag="torch${torch_mm}"        # e.g. torch2.6
@@ -149,37 +132,35 @@ EOF
     local cxx_abi="cxx11abiFALSE"
 
     local wheel_name="flash_attn-${flash_ver}+${cu_tag}${torch_tag}${cxx_abi}-${py_tag}-${abi_tag}-${platform_tag}.whl"
+    local wheel_url="${base_url}/${wheel_name}"
+
     uv pip uninstall flash-attn || true
-    uv pip install "${base_url}/${wheel_name}"
+    install_local_wheel_if_exists "${wheel_url}"
 }
 
 install_prebuilt_apex() {
     # Example URL: https://github.com/RLinf/apex/releases/download/25.09/apex-0.1-cp311-cp311-linux_x86_64.whl
     local base_url="https://github.com/RLinf/apex/releases/download/25.09"
     local py_major py_minor
-    py_major=$(python - <<'EOF'
-import sys
-print(sys.version_info.major)
-EOF
-)
-    py_minor=$(python - <<'EOF'
-import sys
-print(sys.version_info.minor)
-EOF
-)
+    py_major=$(python -c 'import sys; print(sys.version_info.major)')
+    py_minor=$(python -c 'import sys; print(sys.version_info.minor)')
     local py_tag="cp${py_major}${py_minor}"   # e.g. cp311
     local abi_tag="${py_tag}"                 # we assume cpXY-cpXY ABI, adjust if needed
     local platform_tag="linux_x86_64"
     local wheel_name="apex-0.1-${py_tag}-${abi_tag}-${platform_tag}.whl"
+    local wheel_url="${base_url}/${wheel_name}"
         
     uv pip uninstall apex || true
-    uv pip install "${base_url}/${wheel_name}" || (echo "Apex wheel is not available for Python ${py_major}.${py_minor}, please install apex manually. See https://github.com/NVIDIA/apex" >&2; exit 1)
+    # Try local first, if not found (function handles it), then install from URL.
+    # If install fails (e.g. 404), echo error.
+    local local_wheel=$(get_local_wheel_path "$wheel_url")
+    uv pip install "${local_wheel}" || (echo "Apex wheel is not available for Python ${py_major}.${py_minor}, please install apex manually. See https://github.com/NVIDIA/apex" >&2; exit 1)
 }
 
 #=======================EMBODIED INSTALLERS=======================
 
 install_common_embodied_deps() {
-    uv sync --extra embodied --active
+    uv_sync_wrapper --extra embodied --active
     bash $SCRIPT_DIR/embodied/sys_deps.sh
     {
         echo "export NVIDIA_DRIVER_CAPABILITIES=all"
@@ -202,7 +183,7 @@ install_openvla_model() {
             exit 1
             ;;
     esac
-    UV_TORCH_BACKEND=auto uv pip install -r $SCRIPT_DIR/embodied/models/openvla.txt --no-build-isolation
+    UV_TORCH_BACKEND=auto uv_pip_install_wrapper $SCRIPT_DIR/embodied/models/openvla.txt --no-build-isolation
     install_prebuilt_flash_attn
     uv pip uninstall pynvml || true
 }
@@ -215,7 +196,7 @@ install_openvla_oft_model() {
             PYTHON_VERSION="3.10"
             create_and_sync_venv
             install_common_embodied_deps
-            UV_TORCH_BACKEND=auto uv pip install -r $SCRIPT_DIR/embodied/models/openvla_oft.txt --no-build-isolation
+            UV_TORCH_BACKEND=auto uv_pip_install_wrapper $SCRIPT_DIR/embodied/models/openvla_oft.txt --no-build-isolation
             install_behavior_env
             ;;
         maniskill_libero)
@@ -223,7 +204,7 @@ install_openvla_oft_model() {
             install_common_embodied_deps
             install_maniskill_libero_env
             install_prebuilt_flash_attn
-            UV_TORCH_BACKEND=auto uv pip install -r $SCRIPT_DIR/embodied/models/openvla_oft.txt --no-build-isolation
+            UV_TORCH_BACKEND=auto uv_pip_install_wrapper $SCRIPT_DIR/embodied/models/openvla_oft.txt --no-build-isolation
             ;;
         *)
             echo "Environment '$ENV_NAME' is not supported for OpenVLA-OFT model." >&2
@@ -241,13 +222,13 @@ install_openpi_model() {
             create_and_sync_venv
             install_common_embodied_deps
             install_maniskill_libero_env
-            UV_TORCH_BACKEND=auto GIT_LFS_SKIP_SMUDGE=1 uv pip install -r $SCRIPT_DIR/embodied/models/openpi.txt
+            UV_TORCH_BACKEND=auto GIT_LFS_SKIP_SMUDGE=1 uv_pip_install_wrapper $SCRIPT_DIR/embodied/models/openpi.txt
             install_prebuilt_flash_attn
             ;;
         metaworld)
             create_and_sync_venv
             install_common_embodied_deps
-            UV_TORCH_BACKEND=auto GIT_LFS_SKIP_SMUDGE=1 uv pip install -r $SCRIPT_DIR/embodied/models/openpi.txt
+            UV_TORCH_BACKEND=auto GIT_LFS_SKIP_SMUDGE=1 uv_pip_install_wrapper $SCRIPT_DIR/embodied/models/openpi.txt
             install_prebuilt_flash_attn
             install_metaworld_env
             ;;
@@ -259,11 +240,7 @@ install_openpi_model() {
 
     # Replace transformers models with OpenPI's modified versions
     local py_major_minor
-    py_major_minor=$(python - <<'EOF'
-import sys
-print(f"{sys.version_info.major}.{sys.version_info.minor}")
-EOF
-)
+    py_major_minor=$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
     cp -r "$VENV_DIR/lib/python${py_major_minor}/site-packages/openpi/models_pytorch/transformers_replace/"* \
         "$VENV_DIR/lib/python${py_major_minor}/site-packages/transformers/"
     
@@ -284,9 +261,8 @@ install_maniskill_libero_env() {
         libero_dir="$LIBERO_PATH"
     else
         libero_dir="$VENV_DIR/libero"
-        if [ ! -d "$libero_dir" ]; then
-            git clone https://github.com/RLinf/LIBERO.git "$libero_dir"
-        fi
+        # Use clone_or_copy_repo instead of git clone
+        clone_or_copy_repo "https://github.com/RLinf/LIBERO.git" "$libero_dir"
     fi
 
     uv pip install -e "$libero_dir"
@@ -308,9 +284,8 @@ install_behavior_env() {
         behavior_dir="$BEHAVIOR_PATH"
     else
         behavior_dir="$VENV_DIR/BEHAVIOR-1K"
-        if [ ! -d "$behavior_dir" ]; then
-            git clone -b RLinf/v3.7.1 --depth 1 https://github.com/RLinf/BEHAVIOR-1K.git "$behavior_dir"
-        fi
+        # Use clone_or_copy_repo instead of git clone
+        clone_or_copy_repo "https://github.com/RLinf/BEHAVIOR-1K.git" "$behavior_dir" "RLinf/v3.7.1" "1"
     fi
 
     pushd "$behavior_dir" >/dev/null
@@ -332,7 +307,7 @@ install_metaworld_env() {
 #=======================REASONING INSTALLER=======================
 
 install_reason() {
-    uv sync --extra sglang-vllm --active
+    uv_sync_wrapper --extra sglang-vllm --active
 
     # Megatron-LM
     # Prefer an existing checkout if MEGATRON_PATH is provided; otherwise clone into the venv.
@@ -345,16 +320,15 @@ install_reason() {
         megatron_dir="$MEGATRON_PATH"
     else
         megatron_dir="$VENV_DIR/Megatron-LM"
-        if [ ! -d "$megatron_dir" ]; then
-            git clone https://github.com/NVIDIA/Megatron-LM.git -b core_r0.13.0 "$megatron_dir"
-        fi
+        # Use clone_or_copy_repo instead of git clone
+        clone_or_copy_repo "https://github.com/NVIDIA/Megatron-LM.git" "$megatron_dir" "core_r0.13.0"
     fi
 
     echo "export PYTHONPATH=$(realpath "$megatron_dir"):\$PYTHONPATH" >> "$VENV_DIR/bin/activate"
 
     # If TEST_BUILD is 1, skip installing megatron.txt
     if [ "$TEST_BUILD" -ne 1 ]; then
-        uv pip install -r $SCRIPT_DIR/reason/megatron.txt --no-build-isolation
+        APEX_CPP_EXT=1 APEX_CUDA_EXT=1 NVCC_APPEND_FLAGS="--threads 24" APEX_PARALLEL_BUILD=24 uv_pip_install_wrapper $SCRIPT_DIR/reason/megatron.txt --no-build-isolation
     fi
 
     install_prebuilt_apex
