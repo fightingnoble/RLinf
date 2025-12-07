@@ -164,7 +164,7 @@ clone_or_copy_repo() {
         fi
         # Try to checkout branch if specified
         if [ -n "$branch" ] && [ -d "$target_dir/.git" ]; then
-             (cd "$target_dir" && git checkout "$branch" 2>/dev/null || echo "Warning: Could not checkout branch $branch")
+             (cd "$target_dir" && git checkout "$branch" 2>/dev/null || echo "Warning: Could not checkout branch $branch" && cd - >/dev/null)
         fi
     else
         # Remote clone
@@ -207,3 +207,99 @@ install_local_wheel_if_exists() {
     uv pip install "$local_wheel"
 }
 
+# --- Dockerfile Compatibility Layer ---
+
+# Install system dependencies (apt-get)
+install_system_deps() {
+    echo "=== Checking System Dependencies ==="
+    if ! command -v apt-get &> /dev/null; then
+        echo "Skipping apt-get (not on Debian/Ubuntu)."
+        return
+    fi
+
+    local sudo_cmd=""
+    if [ "$EUID" -ne 0 ]; then
+        sudo_cmd="sudo"
+    fi
+
+    echo "Updating apt..."
+    $sudo_cmd apt-get update
+    
+    echo "Installing packages..."
+    # List from Dockerfile
+    $sudo_cmd apt-get install -y --no-install-recommends \
+        git vim libibverbs-dev openssh-server sudo runit runit-systemd tmux \
+        build-essential python3-dev cmake pkg-config iproute2 pciutils python3 python3-pip \
+        wget unzip curl
+}
+
+# Setup Python tools and Environment Variables
+setup_build_env() {
+    echo "=== Setting up Build Environment ==="
+    
+    # Pip Mirror (Session level)
+    export PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.ustc.edu.cn/pypi/simple}"
+    
+    # Upgrade core tools
+    echo "Upgrading pip, setuptools, wheel, uv..."
+    python3 -m pip install --upgrade pip setuptools wheel uv
+    
+    # Environment Variables from Dockerfile
+    export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
+    mkdir -p "$HF_HOME"
+    
+    # UV Settings
+    export UV_DEFAULT_INDEX="${UV_DEFAULT_INDEX:-https://mirrors.ustc.edu.cn/pypi/simple}"
+    export UV_LINK_MODE="${UV_LINK_MODE:-symlink}"
+    
+    echo "Environment variables exported:"
+    echo "  PIP_INDEX_URL=$PIP_INDEX_URL"
+    echo "  HF_HOME=$HF_HOME"
+    echo "  UV_DEFAULT_INDEX=$UV_DEFAULT_INDEX"
+    echo "  UV_LINK_MODE=$UV_LINK_MODE"
+}
+
+# Utility to mimic switch_env (optional installation)
+install_switch_env() {
+    local bin_dir="$HOME/.local/bin"
+    mkdir -p "$bin_dir"
+    local target="$bin_dir/switch_env"
+    
+    # Only install if not exists or force
+    if [ ! -f "$target" ]; then
+        echo "Creating switch_env utility at $target"
+        cat <<'EOF' > "$target"
+#!/bin/bash
+# Local adaptation of switch_env
+if [ -z "$1" ]; then
+    echo "Usage: switch_env <path_to_venv_or_name>"
+    exit 1
+fi
+
+TARGET_ENV="$1"
+
+# Check if it's a direct path
+if [ -d "$TARGET_ENV" ] && [ -f "$TARGET_ENV/bin/activate" ]; then
+    source "$TARGET_ENV/bin/activate"
+    return 0 2>/dev/null || exit 0
+fi
+
+# Check if it's in current directory
+if [ -d "./$TARGET_ENV" ] && [ -f "./$TARGET_ENV/bin/activate" ]; then
+    source "./$TARGET_ENV/bin/activate"
+    return 0 2>/dev/null || exit 0
+fi
+
+echo "Could not find environment: $TARGET_ENV"
+exit 1
+EOF
+        chmod +x "$target"
+    fi
+}
+
+# Main entry point for env prep
+prepare_docker_like_env() {
+    install_system_deps
+    setup_build_env
+    install_switch_env
+}

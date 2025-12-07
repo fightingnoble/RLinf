@@ -16,7 +16,7 @@ SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 # Source local install helpers
 source "$SCRIPT_DIR/install_local_utils.sh"
 
-SUPPORTED_TARGETS=("embodied" "reason")
+SUPPORTED_TARGETS=("embodied" "reason" "prepare")
 SUPPORTED_MODELS=("openvla" "openvla-oft" "openpi")
 SUPPORTED_ENVS=("behavior" "maniskill_libero" "metaworld")
 
@@ -25,6 +25,7 @@ print_help() {
 Usage: bash install.sh <target> [options]
 
 Targets:
+    prepare                Install system dependencies and setup build env (Docker-like).
     embodied               Install embodied model and envs (default).
     reason                 Install reasoning stack (Megatron etc.).
 
@@ -98,6 +99,9 @@ parse_args() {
 }
 
 create_and_sync_venv() {
+    # Ensure build environment is set up (env vars, uv installed)
+    setup_build_env
+
     uv venv "$VENV_DIR" --python "$PYTHON_VERSION"
     # shellcheck disable=SC1090
     source "$VENV_DIR/bin/activate"
@@ -340,6 +344,9 @@ main() {
     parse_args "$@"
 
     case "$TARGET" in
+        prepare)
+            prepare_docker_like_env
+            ;;
         embodied)
             if [ -z "$MODEL" ]; then
                 echo "--model is required when target=embodied. Supported models: ${SUPPORTED_MODELS[*]}" >&2
