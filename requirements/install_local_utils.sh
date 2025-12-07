@@ -238,7 +238,7 @@ setup_build_env() {
     echo "=== Setting up Build Environment ==="
     
     # Pip Mirror (Session level)
-    export PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.ustc.edu.cn/pypi/simple}"
+    export PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.bfsu.edu.cn/pypi/web/simple}"
     
     # Upgrade core tools
     echo "Upgrading pip, setuptools, wheel, uv..."
@@ -249,7 +249,7 @@ setup_build_env() {
     mkdir -p "$HF_HOME"
     
     # UV Settings
-    export UV_DEFAULT_INDEX="${UV_DEFAULT_INDEX:-https://mirrors.ustc.edu.cn/pypi/simple}"
+    export UV_DEFAULT_INDEX="${UV_DEFAULT_INDEX:-https://mirrors.bfsu.edu.cn/pypi/web/simple}"
     export UV_LINK_MODE="${UV_LINK_MODE:-symlink}"
     
     echo "Environment variables exported:"
