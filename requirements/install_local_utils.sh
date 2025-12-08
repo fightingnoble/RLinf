@@ -4,7 +4,7 @@
 # Assuming this script is sourced from requirements/install.sh
 # SCRIPT_DIR is defined in install.sh as requirements/
 WORKSPACE="$(dirname "$SCRIPT_DIR")"
-DOWNLOAD_DIR="${WORKSPACE}/docker/torch-2.6/repos"
+DOWNLOAD_DIR="${extrenal_repo:-${WORKSPACE}/docker/torch-2.6/repos}"
 
 # Function to get local path for a git URL
 get_local_git_path() {
@@ -105,17 +105,19 @@ create_local_pyproject() {
             local org="${BASH_REMATCH[1]}"
             local repo="${BASH_REMATCH[2]}"
             repo="${repo%.git}"  # Remove .git if present
+            repo="${repo%,}"     # Remove trailing comma if present
             repo="${repo%\"}"    # Remove trailing quote if present
             repo="${repo%\'}"    # Remove trailing quote if present
             local git_url="https://github.com/${org}/${repo}.git"
             local local_path=$(get_local_git_path "$git_url")
             
             if [[ "$local_path" != "$git_url" ]]; then
-                # Escape special characters for sed
-                local escaped_git=$(echo "$git_url" | sed 's/[[\.*^$()+?{|]/\\&/g')
-                local escaped_local=$(echo "$local_path" | sed 's/[[\.*^$()+?{|]/\\&/g')
-                # Replace in file
-                sed -i "s|git\+${escaped_git}|git+${escaped_local}|g" "$output_file"
+                # Escape special characters for sed (but not + which is literal in basic regex)
+                # Use -E for extended regex to handle + properly
+                local escaped_git=$(echo "$git_url" | sed 's/[[\.*^$()?{|]/\\&/g' | sed 's|/|\\/|g')
+                local escaped_local=$(echo "$local_path" | sed 's/[[\.*^$()?{|]/\\&/g' | sed 's|/|\\/|g')
+                # Replace in file - use extended regex (-E) and escape + as \+
+                sed -i -E "s|git\+${escaped_git}|git+${escaped_local}|g" "$output_file"
             fi
         fi
     done < <(grep -E "git\+https://github\.com" "$output_file" || true)
@@ -242,6 +244,17 @@ install_system_deps() {
         git vim libibverbs-dev openssh-server sudo runit runit-systemd tmux \
         build-essential python3-dev cmake pkg-config iproute2 pciutils python3 python3-pip \
         wget unzip curl
+    
+    # Install Python 3.11 for embodied targets
+    echo "Installing Python 3.11..."
+    $sudo_cmd apt-get install -y --no-install-recommends \
+        python3.11 python3.11-dev python3.11-venv python3.11-distutils
+    
+    # Set Python 3.11 as an alternative
+    if command -v update-alternatives &> /dev/null; then
+        $sudo_cmd update-alternatives --install /usr/bin/python python /usr/bin/python3.11 2
+        echo "Python 3.11 installed and registered as alternative"
+    fi
 }
 
 # Setup Python tools and Environment Variables
