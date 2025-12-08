@@ -4,7 +4,12 @@
 # Assuming this script is sourced from requirements/install.sh
 # SCRIPT_DIR is defined in install.sh as requirements/
 WORKSPACE="$(dirname "$SCRIPT_DIR")"
-DOWNLOAD_DIR="${WORKSPACE}/docker/torch-2.6/repos"
+# Use extrenal_repo if set, otherwise fall back to default location
+if [ -n "${extrenal_repo:-}" ]; then
+    DOWNLOAD_DIR="${extrenal_repo}"
+else
+    DOWNLOAD_DIR="${WORKSPACE}/docker/torch-2.6/repos"
+fi
 
 # Function to get local path for a git URL
 get_local_git_path() {
@@ -24,11 +29,31 @@ get_local_git_path() {
         return
     fi
     
+    # Check if DOWNLOAD_DIR is set and not empty
+    if [ -z "${DOWNLOAD_DIR:-}" ]; then
+        echo "Warning: DOWNLOAD_DIR is not set, using remote URL: $git_url" >&2
+        echo "$git_url"
+        return
+    fi
+    
     # Check if local directory exists (flat structure)
     local local_path="${DOWNLOAD_DIR}/${repo_name}"
     if [ -d "$local_path" ]; then
-        echo "file://${local_path}"
+        # For uv, try using file:/// format (three slashes) for absolute paths
+        # Ensure the path is absolute (starts with /)
+        if [[ "$local_path" == /* ]]; then
+            # Use file:/// format (three slashes) for absolute paths
+            # This is the standard format for local git repositories
+            echo "Found local repository at: $local_path" >&2
+            echo "file://${local_path}"
+        else
+            # If path is not absolute, make it absolute
+            local abs_path="$(cd "$local_path" && pwd)"
+            echo "Found local repository at: $abs_path" >&2
+            echo "file://${abs_path}"
+        fi
     else
+        echo "Local repository not found at: $local_path, using remote URL: $git_url" >&2
         echo "$git_url"
     fi
 }
@@ -114,8 +139,16 @@ create_local_pyproject() {
                 # Escape special characters for sed
                 local escaped_git=$(echo "$git_url" | sed 's/[[\.*^$()+?{|]/\\&/g')
                 local escaped_local=$(echo "$local_path" | sed 's/[[\.*^$()+?{|]/\\&/g')
+                # Debug output
+                echo "Replacing git URL: git+${git_url} -> git+${local_path}" >&2
                 # Replace in file
                 sed -i "s|git\+${escaped_git}|git+${escaped_local}|g" "$output_file"
+                # Verify replacement
+                if grep -q "git\+${escaped_local}" "$output_file"; then
+                    echo "Successfully replaced in pyproject.toml" >&2
+                else
+                    echo "Warning: Replacement may have failed" >&2
+                fi
             fi
         fi
     done < <(grep -E "git\+https://github\.com" "$output_file" || true)
