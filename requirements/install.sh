@@ -8,6 +8,7 @@ MODEL=""
 ENV_NAME=""
 VENV_DIR=".venv"
 PYTHON_VERSION="3.11.14"
+USE_CURRENT_ENV=0
 TEST_BUILD=${TEST_BUILD:-0}
 # Absolute path to this script (resolves symlinks)
 SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
@@ -36,6 +37,7 @@ Options (for target=embodied):
 Common options:
     -h, --help             Show this help message and exit.
     --venv <dir>           Virtual environment directory name (default: .venv).
+    --no-venv              Do not create a venv, install into current environment.
 EOF
 }
 
@@ -58,6 +60,10 @@ parse_args() {
                 fi
                 VENV_DIR="${2:-}"
                 shift 2
+                ;;
+            --no-venv)
+                USE_CURRENT_ENV=1
+                shift
                 ;;
             --model)
                 if [ -z "${2:-}" ]; then
@@ -102,9 +108,13 @@ create_and_sync_venv() {
     # Ensure build environment is set up (env vars, uv installed)
     setup_build_env
 
-    uv venv "$VENV_DIR" --python "$PYTHON_VERSION"
-    # shellcheck disable=SC1090
-    source "$VENV_DIR/bin/activate"
+    if [ "$USE_CURRENT_ENV" -eq 1 ]; then
+        echo "Using current environment (skipping venv creation)..."
+    else
+        uv venv "$VENV_DIR" --python "$PYTHON_VERSION"
+        # shellcheck disable=SC1090
+        source "$VENV_DIR/bin/activate"
+    fi
     uv_sync_wrapper --active
 }
 
