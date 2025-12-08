@@ -303,3 +303,33 @@ prepare_docker_like_env() {
     setup_build_env
     install_switch_env
 }
+
+# Helper to add env vars to activate script (venv or conda)
+add_env_var() {
+    local name="$1"
+    local value="$2"
+    
+    # Export in current session
+    export "${name}=${value}"
+    
+    # Persist
+    if [ "${USE_CURRENT_ENV:-0}" -eq 1 ]; then
+        # Try to persist in conda if available
+        # Check for conda-meta or etc/conda
+        if [ -d "$VENV_DIR/conda-meta" ] || [ -d "$VENV_DIR/etc/conda" ]; then
+            local act_dir="$VENV_DIR/etc/conda/activate.d"
+            mkdir -p "$act_dir"
+            local script_path="$act_dir/rlinf_vars.sh"
+            echo "export ${name}=${value}" >> "$script_path"
+            chmod +x "$script_path"
+            echo "Added $name to Conda activation script: $script_path"
+        else
+            echo "Warning: Could not persist env var $name to activation script. Please manually export it." >&2
+        fi
+    else
+        # Standard venv
+        if [ -f "$VENV_DIR/bin/activate" ]; then
+            echo "export ${name}=${value}" >> "$VENV_DIR/bin/activate"
+        fi
+    fi
+}

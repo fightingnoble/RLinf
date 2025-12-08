@@ -109,7 +109,27 @@ create_and_sync_venv() {
     setup_build_env
 
     if [ "$USE_CURRENT_ENV" -eq 1 ]; then
-        echo "Using current environment (skipping venv creation)..."
+        VENV_DIR=$(python3 -c "import sys; print(sys.prefix)")
+        echo "Using current environment at: $VENV_DIR"
+
+        # Check Python version
+        local current_ver
+        current_ver=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+        local target_ver
+        target_ver=$(echo "$PYTHON_VERSION" | cut -d. -f1,2)
+
+        if [ "$current_ver" != "$target_ver" ]; then
+            echo "Warning: Current Python ($current_ver) does not match target ($target_ver)."
+            if command -v conda >/dev/null 2>&1; then
+                echo "Attempting to install Python $target_ver via Conda..."
+                conda install -y "python=$target_ver" || { echo "Failed to install Python via Conda"; exit 1; }
+            else
+                echo "Error: Cannot change Python version (Conda not found). Please use Python $target_ver."
+                exit 1
+            fi
+        else
+            echo "Python version matches: $current_ver"
+        fi
     else
         uv venv "$VENV_DIR" --python "$PYTHON_VERSION"
         # shellcheck disable=SC1090
@@ -117,6 +137,8 @@ create_and_sync_venv() {
     fi
     uv_sync_wrapper --active
 }
+
+# Helper to add env vars moved to install_local_utils.sh
 
 install_prebuilt_flash_attn() {
     # Base release info – adjust when bumping flash-attn
@@ -176,11 +198,10 @@ install_prebuilt_apex() {
 install_common_embodied_deps() {
     uv_sync_wrapper --extra embodied --active
     bash $SCRIPT_DIR/embodied/sys_deps.sh
-    {
-        echo "export NVIDIA_DRIVER_CAPABILITIES=all"
-        echo "export VK_DRIVER_FILES=/etc/vulkan/icd.d/nvidia_icd.json"
-        echo "export VK_ICD_FILENAMES=/etc/vulkan/icd.d/nvidia_icd.json"
-    } >> "$VENV_DIR/bin/activate"
+    
+    add_env_var "NVIDIA_DRIVER_CAPABILITIES" "all"
+    add_env_var "VK_DRIVER_FILES" "/etc/vulkan/icd.d/nvidia_icd.json"
+    add_env_var "VK_ICD_FILENAMES" "/etc/vulkan/icd.d/nvidia_icd.json"
 }
 
 install_openvla_model() {
@@ -280,7 +301,7 @@ install_maniskill_libero_env() {
     fi
 
     uv pip install -e "$libero_dir"
-    echo "export PYTHONPATH=$(realpath "$libero_dir"):\$PYTHONPATH" >> "$VENV_DIR/bin/activate"
+    add_env_var "PYTHONPATH" "$(realpath "$libero_dir"):\$PYTHONPATH"
     uv pip install -r $SCRIPT_DIR/embodied/envs/maniskill.txt
 
     # Maniskill assets
@@ -338,7 +359,7 @@ install_reason() {
         clone_or_copy_repo "https://github.com/NVIDIA/Megatron-LM.git" "$megatron_dir" "core_r0.13.0"
     fi
 
-    echo "export PYTHONPATH=$(realpath "$megatron_dir"):\$PYTHONPATH" >> "$VENV_DIR/bin/activate"
+    add_env_var "PYTHONPATH" "$(realpath "$megatron_dir"):\$PYTHONPATH"
 
     # If TEST_BUILD is 1, skip installing megatron.txt
     if [ "$TEST_BUILD" -ne 1 ]; then
