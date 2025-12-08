@@ -136,35 +136,7 @@ uv_sync_wrapper() {
         rm -f "$TEMP_PYPROJECT"
     fi
 
-    # Use different commands based on environment type
-    if [ "${USE_CURRENT_ENV:-0}" -eq 1 ]; then
-        # Conda/current env mode: use uv pip install instead of uv sync
-        # Parse --extra arguments and convert to pip install syntax
-        local extras=""
-        local skip_next=0
-        for arg in "${args[@]}"; do
-            if [ "$skip_next" -eq 1 ]; then
-                extras="${extras},${arg}"
-                skip_next=0
-            elif [ "$arg" = "--extra" ]; then
-                skip_next=1
-            fi
-        done
-        
-        # Build install target
-        local install_target="."
-        if [ -n "$extras" ]; then
-            # Remove leading comma
-            extras="${extras#,}"
-            install_target=".[${extras}]"
-        fi
-        
-        cd "${WORKSPACE}"
-        UV_TORCH_BACKEND=auto uv pip install -e "${install_target}"
-    else
-        # Standard venv mode: use uv sync
-        UV_TORCH_BACKEND=auto uv sync "${args[@]}"
-    fi
+    UV_TORCH_BACKEND=auto uv sync "${args[@]}"
 
     # Restore original pyproject.toml if backup exists
     if [ -f "$PYPROJECT_BACKUP" ]; then
@@ -280,11 +252,19 @@ setup_build_env() {
     export UV_DEFAULT_INDEX="${UV_DEFAULT_INDEX:-https://mirrors.bfsu.edu.cn/pypi/web/simple}"
     export UV_LINK_MODE="${UV_LINK_MODE:-symlink}"
     
+    # UV Python Management Settings
+    # Prevent uv from downloading managed Python versions from GitHub
+    export UV_PYTHON_DOWNLOADS="${UV_PYTHON_DOWNLOADS:-never}"
+    # Prefer system/conda python over managed ones
+    export UV_PYTHON_PREFERENCE="${UV_PYTHON_PREFERENCE:-system}"
+    
     echo "Environment variables exported:"
     echo "  PIP_INDEX_URL=$PIP_INDEX_URL"
     echo "  HF_HOME=$HF_HOME"
     echo "  UV_DEFAULT_INDEX=$UV_DEFAULT_INDEX"
     echo "  UV_LINK_MODE=$UV_LINK_MODE"
+    echo "  UV_PYTHON_DOWNLOADS=$UV_PYTHON_DOWNLOADS"
+    echo "  UV_PYTHON_PREFERENCE=$UV_PYTHON_PREFERENCE"
 }
 
 # Utility to mimic switch_env (optional installation)
@@ -361,3 +341,4 @@ add_env_var() {
         fi
     fi
 }
+

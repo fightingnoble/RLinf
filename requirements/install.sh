@@ -38,6 +38,7 @@ Common options:
     -h, --help             Show this help message and exit.
     --venv <dir>           Virtual environment directory name (default: .venv).
     --no-venv              Do not create a venv, install into current environment.
+    --python <path/ver>    Specify Python path or version to use (avoids download).
 EOF
 }
 
@@ -64,6 +65,14 @@ parse_args() {
             --no-venv)
                 USE_CURRENT_ENV=1
                 shift
+                ;;
+            --python)
+                if [ -z "${2:-}" ]; then
+                    echo "--python requires a path or version argument." >&2
+                    exit 1
+                fi
+                PYTHON_VERSION="${2:-}"
+                shift 2
                 ;;
             --model)
                 if [ -z "${2:-}" ]; then
@@ -111,34 +120,29 @@ create_and_sync_venv() {
     if [ "$USE_CURRENT_ENV" -eq 1 ]; then
         VENV_DIR=$(python3 -c "import sys; print(sys.prefix)")
         echo "Using current environment at: $VENV_DIR"
-
-        # Check Python version
-        local current_ver
-        current_ver=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-        local target_ver
-        target_ver=$(echo "$PYTHON_VERSION" | cut -d. -f1,2)
-
-        if [ "$current_ver" != "$target_ver" ]; then
-            echo "Warning: Current Python ($current_ver) does not match target ($target_ver)."
-            if command -v conda >/dev/null 2>&1; then
-                echo "Attempting to install Python $target_ver via Conda..."
-                conda install -y "python=$target_ver" || { echo "Failed to install Python via Conda"; exit 1; }
-            else
-                echo "Error: Cannot change Python version (Conda not found). Please use Python $target_ver."
-                exit 1
-            fi
-        else
-            echo "Python version matches: $current_ver"
-        fi
     else
+        # Warn if conda is active when creating a new venv
+        if [ -n "${CONDA_PREFIX:-}" ]; then
+            echo "==========================================" >&2
+            echo "Warning: Conda environment is active!" >&2
+            echo "  Conda environment: $CONDA_PREFIX" >&2
+            echo "" >&2
+            echo "This may cause conflicts when creating a new venv." >&2
+            echo "Recommended options:" >&2
+            echo "  1. Run 'conda deactivate' before this script" >&2
+            echo "  2. Use --no-venv to install directly into the conda environment" >&2
+            echo "  3. Use --python to explicitly specify Python path" >&2
+            echo "" >&2
+            echo "Continuing with venv creation..." >&2
+            echo "==========================================" >&2
+        fi
+        
         uv venv "$VENV_DIR" --python "$PYTHON_VERSION"
         # shellcheck disable=SC1090
         source "$VENV_DIR/bin/activate"
     fi
     uv_sync_wrapper --active
 }
-
-# Helper to add env vars moved to install_local_utils.sh
 
 install_prebuilt_flash_attn() {
     # Base release info – adjust when bumping flash-attn
