@@ -306,7 +306,7 @@ install_maniskill_libero_env() {
 
     uv pip install -e "$libero_dir"
     add_env_var "PYTHONPATH" "$(realpath "$libero_dir"):\$PYTHONPATH"
-    uv pip install -r $SCRIPT_DIR/embodied/envs/maniskill.txt
+    uv_pip_install_wrapper $SCRIPT_DIR/embodied/envs/maniskill.txt
 
     # Maniskill assets
     bash $SCRIPT_DIR/embodied/download_assets.sh --assets maniskill
