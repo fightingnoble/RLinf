@@ -134,6 +134,17 @@ uv_sync_wrapper() {
         create_local_pyproject "${WORKSPACE}/pyproject.toml" "$TEMP_PYPROJECT"
         cp "$TEMP_PYPROJECT" "${WORKSPACE}/pyproject.toml"
         rm -f "$TEMP_PYPROJECT"
+        
+        # Debug: Show what was replaced
+        echo "=== Local path replacements in pyproject.toml ==="
+        grep -E "git\+file://" "${WORKSPACE}/pyproject.toml" || echo "No local git paths found"
+        echo "=================================================="
+    fi
+    
+    # Remove lock file to force uv to re-resolve dependencies with new URLs
+    if [ -f "${WORKSPACE}/uv.lock" ]; then
+        echo "Removing uv.lock to force dependency re-resolution..."
+        rm -f "${WORKSPACE}/uv.lock"
     fi
 
     UV_TORCH_BACKEND=auto uv sync "${args[@]}"
