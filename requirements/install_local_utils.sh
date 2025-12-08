@@ -136,7 +136,35 @@ uv_sync_wrapper() {
         rm -f "$TEMP_PYPROJECT"
     fi
 
-    UV_TORCH_BACKEND=auto uv sync "${args[@]}"
+    # Use different commands based on environment type
+    if [ "${USE_CURRENT_ENV:-0}" -eq 1 ]; then
+        # Conda/current env mode: use uv pip install instead of uv sync
+        # Parse --extra arguments and convert to pip install syntax
+        local extras=""
+        local skip_next=0
+        for arg in "${args[@]}"; do
+            if [ "$skip_next" -eq 1 ]; then
+                extras="${extras},${arg}"
+                skip_next=0
+            elif [ "$arg" = "--extra" ]; then
+                skip_next=1
+            fi
+        done
+        
+        # Build install target
+        local install_target="."
+        if [ -n "$extras" ]; then
+            # Remove leading comma
+            extras="${extras#,}"
+            install_target=".[${extras}]"
+        fi
+        
+        cd "${WORKSPACE}"
+        UV_TORCH_BACKEND=auto uv pip install -e "${install_target}"
+    else
+        # Standard venv mode: use uv sync
+        UV_TORCH_BACKEND=auto uv sync "${args[@]}"
+    fi
 
     # Restore original pyproject.toml if backup exists
     if [ -f "$PYPROJECT_BACKUP" ]; then
