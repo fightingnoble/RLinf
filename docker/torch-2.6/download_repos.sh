@@ -27,6 +27,7 @@ REPOS=(
     "https://github.com/moojink/openvla-oft.git openvla-oft"
     "https://github.com/RLinf/openpi.git openpi"
     "https://github.com/NVIDIA/Megatron-LM.git Megatron-LM core_r0.13.0"
+    "https://github.com/cython/cython.git cython"
 )
 
 for repo_info in "${REPOS[@]}"; do
