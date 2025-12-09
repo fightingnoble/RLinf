@@ -53,33 +53,41 @@ create_local_requirements() {
         return 1
     fi
     
-    # Create temporary file with local paths
-    > "$output_file"
+    # Copy original file
+    cp "$input_file" "$output_file"
+    
+    if [ ! -d "$DOWNLOAD_DIR" ]; then return; fi
+    
+    # Iterate over local git repos and replace in file
+    for repo_path in "$DOWNLOAD_DIR"/*; do
+        if [ -d "$repo_path" ] && [ "$(basename "$repo_path")" != "wheels" ]; then
+            local repo_name=$(basename "$repo_path")
+            local local_url="file://${repo_path}"
+            
+            # Replace git+https://.../repo_name.git or git+https://.../repo_name
+            sed -i -E "s|git\+https://github\.com/[^/]+/${repo_name}(\.git)?|git+${local_url}|g" "$output_file"
+        fi
+    done
+    
+    # Handle wheels (keep existing logic or simplify?)
+    # Keeping existing wheel logic for now as it's specific
+    local temp_file=$(mktemp)
     while IFS= read -r line || [ -n "$line" ]; do
-        if [[ "$line" =~ @[[:space:]]*git\+https?:// ]]; then
-            # Extract the git URL
-            local git_url=$(echo "$line" | sed -E 's/.*@[[:space:]]*git\+([^[:space:]]+).*/\1/')
-            local local_path=$(get_local_git_path "$git_url")
-            # Replace git URL with local path
-            local new_line=$(echo "$line" | sed -E "s|@[[:space:]]*git\+[^[:space:]]+|@ git+${local_path}|")
-            echo "$new_line" >> "$output_file"
-        elif [[ "$line" =~ @[[:space:]]*https?://.*\.whl ]]; then
-            # Handle Wheel URL
+        if [[ "$line" =~ @[[:space:]]*https?://.*\.whl ]]; then
             local wheel_url=$(echo "$line" | sed -E 's/.*@[[:space:]]*(https?:\/\/[^[:space:]]+).*/\1/')
             local local_path=$(get_local_wheel_path "$wheel_url")
             
             if [[ "$local_path" != "$wheel_url" ]]; then
-                # Replace with file:// path
                 local new_line=$(echo "$line" | sed -E "s|@[[:space:]]*https?://[^[:space:]]+|@ file://${local_path}|")
-                echo "$new_line" >> "$output_file"
+                echo "$new_line" >> "$temp_file"
             else
-                echo "$line" >> "$output_file"
+                echo "$line" >> "$temp_file"
             fi
         else
-            # Not a git dependency, keep as is
-            echo "$line" >> "$output_file"
+            echo "$line" >> "$temp_file"
         fi
-    done < "$input_file"
+    done < "$output_file"
+    mv "$temp_file" "$output_file"
 }
 
 # Function to create a modified pyproject.toml with local paths
@@ -95,28 +103,18 @@ create_local_pyproject() {
     # Copy original file
     cp "$input_file" "$output_file"
     
-    # Find and replace each git URL
-    while IFS= read -r line; do
-        if [[ "$line" =~ git\+https://github\.com/([^/]+)/([^/\"\']+) ]]; then
-            local org="${BASH_REMATCH[1]}"
-            local repo="${BASH_REMATCH[2]}"
-            repo="${repo%.git}"  # Remove .git if present
-            repo="${repo%,}"     # Remove trailing comma if present
-            repo="${repo%\"}"    # Remove trailing quote if present
-            repo="${repo%\'}"    # Remove trailing quote if present
-            local git_url="https://github.com/${org}/${repo}.git"
-            local local_path=$(get_local_git_path "$git_url")
+    if [ ! -d "$DOWNLOAD_DIR" ]; then return; fi
+    
+    # Iterate over local git repos and replace in file
+    # This matches git+https://github.com/ORG/REPO.git or .../REPO
+    for repo_path in "$DOWNLOAD_DIR"/*; do
+        if [ -d "$repo_path" ] && [ "$(basename "$repo_path")" != "wheels" ]; then
+            local repo_name=$(basename "$repo_path")
+            local local_url="file://${repo_path}"
             
-            if [[ "$local_path" != "$git_url" ]]; then
-                # Escape special characters for sed (but not + which is literal in basic regex)
-                # Use -E for extended regex to handle + properly
-                local escaped_git=$(echo "$git_url" | sed 's/[[\.*^$()?{|]/\\&/g' | sed 's|/|\\/|g')
-                local escaped_local=$(echo "$local_path" | sed 's/[[\.*^$()?{|]/\\&/g' | sed 's|/|\\/|g')
-                # Replace in file - use extended regex (-E) and escape + as \+
-                sed -i -E "s|git\+${escaped_git}|git+${escaped_local}|g" "$output_file"
-            fi
+            sed -i -E "s|git\+https://github\.com/[^/]+/${repo_name}(\.git)?|git+${local_url}|g" "$output_file"
         fi
-    done < <(grep -E "git\+https://github\.com" "$output_file" || true)
+    done
 }
 
 # Wrapper for uv sync to use local deps
