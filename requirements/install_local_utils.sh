@@ -9,17 +9,13 @@ DOWNLOAD_DIR="${extrenal_repo:-${WORKSPACE}/docker/torch-2.6/repos}"
 # Function to get local path for a git URL
 get_local_git_path() {
     local git_url="$1"
-    local repo_name=""
     
-    # Extract repository name from various URL formats
-    if [[ "$git_url" =~ github\.com[:/]([^/]+)/([^/]+) ]]; then
-        local repo="${BASH_REMATCH[2]}"
-        # Remove .git suffix if present
-        repo="${repo%.git}"
-        repo_name="${repo}"
-    fi
+    # Extract repository name using basename (simple and robust)
+    # This handles https://..., git@..., and other formats automatically
+    # It also strips the .git suffix if provided as the second argument
+    local repo_name=$(basename "$git_url" .git)
     
-    if [ -z "$repo_name" ]; then
+    if [ -z "$repo_name" ] || [ "$repo_name" = "/" ] || [ "$repo_name" = "." ]; then
         echo "$git_url"
         return
     fi
