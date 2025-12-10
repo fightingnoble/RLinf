@@ -1,3 +1,51 @@
+# Patch requirement file (backup + local replacements)
+patch_requirement_file() {
+    local req_file="$1"
+    if [ ! -f "$req_file" ]; then
+        return 1
+    fi
+    cp "$req_file" "${req_file}.backup"
+    apply_git_url_replacements_ondemand "$req_file"
+    apply_wheel_url_replacements "$req_file"
+    return 0
+}
+
+# Patch a list of requirement files once at startup
+patch_all_requirements_for_install() {
+    local files=("$@")
+    if [ "${#files[@]}" -eq 0 ]; then
+        return 0
+    fi
+    local patched=0
+    for f in "${files[@]}"; do
+        if patch_requirement_file "$f"; then
+            patched=1
+            echo "[local-deps]   - Patched requirements: $f"
+        fi
+    done
+    if [ "$patched" -eq 1 ]; then
+        echo "[local-deps] Requirements patched"
+    fi
+}
+
+# Restore requirement files from backup
+restore_all_requirements() {
+    local files=("$@")
+    if [ "${#files[@]}" -eq 0 ]; then
+        return 0
+    fi
+    local restored=0
+    for f in "${files[@]}"; do
+        if [ -f "${f}.backup" ]; then
+            echo -e "\033[36m[local-deps] restoring requirements backup ${f}.backup -> ${f}\033[0m"
+            mv "${f}.backup" "$f"
+            restored=$((restored + 1))
+        fi
+    done
+    if [ "$restored" -gt 0 ]; then
+        echo "[local-deps]   - Restored $restored requirements file(s)"
+    fi
+}
 #! /bin/bash
 
 # Local download directory
@@ -43,112 +91,224 @@ get_local_wheel_path() {
     fi
 }
 
-# Function to create a modified requirements file with local paths
-create_local_requirements() {
-    local input_file="$1"
-    local output_file="$2"
-    
-    if [ ! -f "$input_file" ]; then
-        echo "Error: Requirements file not found: $input_file"
-        return 1
+# Collect all local repos mapping: repo_name -> local_path
+# Output format: one "repo_name|local_path" per line
+collect_local_repos() {
+    if [ ! -d "$DOWNLOAD_DIR" ]; then
+        return 0
     fi
     
-    # Copy original file
-    cp "$input_file" "$output_file"
-    
-    if [ ! -d "$DOWNLOAD_DIR" ]; then return; fi
-    
-    # Iterate over local git repos and replace in file
     for repo_path in "$DOWNLOAD_DIR"/*; do
-        if [ -d "$repo_path" ] && [ "$(basename "$repo_path")" != "wheels" ]; then
+        if [ -d "$repo_path" ] && [ "$(basename "$repo_path")" != "wheels" ] && [ "$(basename "$repo_path")" != "assets" ]; then
             local repo_name=$(basename "$repo_path")
-            local local_url="file://${repo_path}"
-            
-            # Replace git+https://.../repo_name.git or git+https://.../repo_name
-            sed -i -E "s|git\+https://github\.com/[^/]+/${repo_name}(\.git)?|git+${local_url}|g" "$output_file"
+            echo "${repo_name}|${repo_path}"
         fi
     done
+}
+
+# Apply git URL replacements to a file using pre-collected repos mapping
+# Args: target_file, repos_mapping (output from collect_local_repos)
+apply_git_url_replacements() {
+    local target_file="$1"
+    local repos_mapping="$2"
     
-    # Handle wheels (keep existing logic or simplify?)
-    # Keeping existing wheel logic for now as it's specific
-    local temp_file=$(mktemp)
+    if [ ! -f "$target_file" ]; then
+        return 0
+    fi
+    
+    if [ -z "$repos_mapping" ]; then
+        return 0
+    fi
+    
+    # Apply each repo's replacement
+    while IFS='|' read -r repo_name repo_path; do
+        local local_url="file://${repo_path}"
+        if grep -qE "git\+https://github\.com/.*/${repo_name}(\.git)?(@[^\"']*)?" "$target_file"; then
+            echo -e "\033[32m[local-deps] using local repo ${repo_name} -> ${repo_path} in ${target_file}\033[0m"
+            sed -i -E "s|git\+https://github\.com/[^/]+/${repo_name}(\.git)?(@[^\"']*)?|${local_url}|g" "$target_file"
+        else
+            echo -e "\033[33m[local-deps] remote fallback for repo ${repo_name} (not referenced) in ${target_file}\033[0m"
+        fi
+    done <<< "$repos_mapping"
+}
+
+# Apply git URL replacements by on-demand lookup (single file processing)
+apply_git_url_replacements_ondemand() {
+    local target_file="$1"
+
+    if [ ! -f "$target_file" ]; then
+        return 0
+    fi
+
+    local temp_file
+    temp_file=$(mktemp)
+    while IFS= read -r line || [ -n "$line" ]; do
+        if [[ "$line" =~ git\+https://[^[:space:]]+ ]]; then
+            local git_url
+            git_url=$(echo "$line" | grep -oE 'git\+https://[^[:space:]]+')
+            local clean_url="${git_url#git+}"
+            local local_path
+            local_path=$(get_local_git_path "$clean_url")
+            if [[ "$local_path" == file://* ]]; then
+                echo -e "\033[32m[local-deps] using local repo ${local_path} in ${target_file}\033[0m"
+                # Escape special chars in git_url for sed
+                local escaped_git_url=$(echo "$git_url" | sed 's/[+]/\\&/g')
+                line=$(echo "$line" | sed -E "s|${escaped_git_url}(@[^[:space:]]*)?|git+${local_path}|g")
+            else
+                echo -e "\033[33m[local-deps] remote fallback for ${clean_url} in ${target_file}\033[0m"
+            fi
+        fi
+        echo "$line" >> "$temp_file"
+    done < "$target_file"
+    mv "$temp_file" "$target_file"
+}
+
+# Apply wheel URL replacements in-place for a target file
+apply_wheel_url_replacements() {
+    local target_file="$1"
+
+    if [ ! -f "$target_file" ]; then
+        return 0
+    fi
+
+    local temp_file
+    temp_file=$(mktemp)
     while IFS= read -r line || [ -n "$line" ]; do
         if [[ "$line" =~ @[[:space:]]*https?://.*\.whl ]]; then
-            local wheel_url=$(echo "$line" | sed -E 's/.*@[[:space:]]*(https?:\/\/[^[:space:]]+).*/\1/')
-            local local_path=$(get_local_wheel_path "$wheel_url")
-            
+            local wheel_url
+            wheel_url=$(echo "$line" | sed -E 's/.*@[[:space:]]*(https?:\/\/[^[:space:]]+).*/\1/')
+            local local_path
+            local_path=$(get_local_wheel_path "$wheel_url")
             if [[ "$local_path" != "$wheel_url" ]]; then
-                local new_line=$(echo "$line" | sed -E "s|@[[:space:]]*https?://[^[:space:]]+|@ file://${local_path}|")
-                echo "$new_line" >> "$temp_file"
+                echo -e "\033[32m[local-deps] using local wheel ${local_path} in ${target_file}\033[0m"
+                echo "$line" | sed -E "s|@[[:space:]]*https?://[^[:space:]]+|@ file://${local_path}|" >> "$temp_file"
             else
+                echo -e "\033[33m[local-deps] remote wheel fallback ${wheel_url} in ${target_file}\033[0m"
                 echo "$line" >> "$temp_file"
             fi
         else
             echo "$line" >> "$temp_file"
         fi
-    done < "$output_file"
-    mv "$temp_file" "$output_file"
+    done < "$target_file"
+    mv "$temp_file" "$target_file"
 }
 
 # Function to create a modified pyproject.toml with local paths
 create_local_pyproject() {
     local input_file="$1"
     local output_file="$2"
-    
+
     if [ ! -f "$input_file" ]; then
-        echo "Error: pyproject.toml not found: $input_file"
+        echo "Error: pyproject.toml not found: $input_file" >&2
         return 1
     fi
-    
-    # Copy original file
+
     cp "$input_file" "$output_file"
-    
-    if [ ! -d "$DOWNLOAD_DIR" ]; then return; fi
-    
-    # Iterate over local git repos and replace in file
-    # This matches git+https://github.com/ORG/REPO.git or .../REPO
-    for repo_path in "$DOWNLOAD_DIR"/*; do
-        if [ -d "$repo_path" ] && [ "$(basename "$repo_path")" != "wheels" ]; then
-            local repo_name=$(basename "$repo_path")
-            local local_url="file://${repo_path}"
-            
-            sed -i -E "s|git\+https://github\.com/[^/]+/${repo_name}(\.git)?|git+${local_url}|g" "$output_file"
-        fi
-    done
+    apply_git_url_replacements_ondemand "$output_file"
 }
 
-# Wrapper for uv sync to use local deps
-uv_sync_wrapper() {
-    local args=("$@")
-    # Handle pyproject.toml with local git repositories
-    local PYPROJECT_BACKUP="${WORKSPACE}/pyproject.toml.backup"
-    if [ -f "${WORKSPACE}/pyproject.toml" ]; then
-        # Create backup
-        cp "${WORKSPACE}/pyproject.toml" "$PYPROJECT_BACKUP"
-        # Create modified version with local paths
-        local TEMP_PYPROJECT=$(mktemp)
-        create_local_pyproject "${WORKSPACE}/pyproject.toml" "$TEMP_PYPROJECT"
-        cp "$TEMP_PYPROJECT" "${WORKSPACE}/pyproject.toml"
-        rm -f "$TEMP_PYPROJECT"
-        
-        # Debug: Show what was replaced
-        echo "=== Local path replacements in pyproject.toml ==="
-        grep -E "git\+file://" "${WORKSPACE}/pyproject.toml" || echo "No local git paths found"
-        echo "=================================================="
+# Unified initialization: patch all pyproject.toml files and remove lock file
+# Should be called ONCE at the beginning of install.sh
+patch_all_pyprojects_for_install() {
+    echo "=============================================="
+    echo "[local-deps] Initializing local dependencies"
+    echo "=============================================="
+    
+    # Collect repos mapping ONCE
+    local repos_mapping
+    repos_mapping=$(collect_local_repos)
+    
+    if [ -z "$repos_mapping" ]; then
+        echo "[local-deps] No local repos found"
+        echo "[local-deps] Initialization complete"
+        echo "=============================================="
+        echo ""
+        return 0
     fi
     
-    # Remove lock file to force uv to re-resolve dependencies with new URLs
-    if [ -f "${WORKSPACE}/uv.lock" ]; then
-        echo "Removing uv.lock to force dependency re-resolution..."
-        rm -f "${WORKSPACE}/uv.lock"
+    local patched_any=0
+    
+    # 1. Patch local repos
+    if [ -n "${DOWNLOAD_DIR:-}" ] && [ -d "$DOWNLOAD_DIR" ]; then
+        echo "[local-deps] Patching local repos..."
+        while IFS= read -r pyproject; do
+            if ! grep -q "git+https://" "$pyproject" 2>/dev/null; then
+                continue
+            fi
+            
+            local repo_name
+            repo_name=$(basename "$(dirname "$pyproject")")
+            cp "$pyproject" "${pyproject}.backup"
+            apply_git_url_replacements "$pyproject" "$repos_mapping"
+            echo "[local-deps]   - Patched $repo_name"
+            patched_any=1
+        done < <(find "$DOWNLOAD_DIR" -maxdepth 2 -name "pyproject.toml")
     fi
-
-    UV_TORCH_BACKEND=auto uv sync "${args[@]}"
-
-    # Restore original pyproject.toml if backup exists
-    if [ -f "$PYPROJECT_BACKUP" ]; then
-        mv "$PYPROJECT_BACKUP" "${WORKSPACE}/pyproject.toml"
+    
+    # 2. Patch main project
+    if [ -f "${WORKSPACE}/pyproject.toml" ]; then
+        echo "[local-deps] Patching main pyproject.toml..."
+        if grep -q "git+https://" "${WORKSPACE}/pyproject.toml" 2>/dev/null; then
+            cp "${WORKSPACE}/pyproject.toml" "${WORKSPACE}/pyproject.toml.backup"
+            apply_git_url_replacements "${WORKSPACE}/pyproject.toml" "$repos_mapping"
+            echo "[local-deps]   - Patched main project"
+            patched_any=1
+        fi
     fi
+    
+    # 3. Remove lock and show debug info if anything was patched
+    if [ "$patched_any" -eq 1 ]; then
+        if [ -f "${WORKSPACE}/uv.lock" ]; then
+            echo "[local-deps]   - Removing uv.lock to force dependency re-resolution"
+            rm -f "${WORKSPACE}/uv.lock"
+        fi
+        
+        if [ -f "${WORKSPACE}/pyproject.toml" ]; then
+            echo ""
+            echo "=== Local path replacements in main pyproject.toml ==="
+            grep -E "file://" "${WORKSPACE}/pyproject.toml" | head -n 10 || echo "No local file:// paths found"
+            local total_count
+            total_count=$(grep -c "file://" "${WORKSPACE}/pyproject.toml" 2>/dev/null || echo "0")
+            if [ "$total_count" -gt 10 ]; then
+                echo "... and $((total_count - 10)) more"
+            fi
+            echo "======================================================="
+        fi
+    fi
+    
+    echo "[local-deps] Initialization complete"
+    echo "=============================================="
+    echo ""
+}
+
+# Restore all backed up pyproject.toml files
+# Should be called at the end of install.sh
+restore_all_pyprojects() {
+    echo ""
+    echo "[local-deps] Restoring original pyproject.toml files..."
+    
+    # Restore main project
+    if [ -f "${WORKSPACE}/pyproject.toml.backup" ]; then
+        echo -e "\033[36m[local-deps] restoring main pyproject backup ${WORKSPACE}/pyproject.toml.backup -> ${WORKSPACE}/pyproject.toml\033[0m"
+        mv "${WORKSPACE}/pyproject.toml.backup" "${WORKSPACE}/pyproject.toml"
+        echo "[local-deps]   - Restored main pyproject.toml"
+    fi
+    
+    # Restore local repos
+    if [ -d "$DOWNLOAD_DIR" ]; then
+        local restored_count=0
+        find "$DOWNLOAD_DIR" -maxdepth 2 -name "pyproject.toml.backup" | while read -r backup; do
+            local original="${backup%.backup}"
+            echo -e "\033[36m[local-deps] restoring repo pyproject backup ${backup} -> ${original}\033[0m"
+            mv "$backup" "$original"
+            restored_count=$((restored_count + 1))
+        done
+        if [ "$restored_count" -gt 0 ]; then
+            echo "[local-deps]   - Restored $restored_count repo pyproject.toml file(s)"
+        fi
+    fi
+    
+    echo "[local-deps] Restore complete"
 }
 
 # Function to clone or copy from local
@@ -186,26 +346,6 @@ clone_or_copy_repo() {
 }
 
 # Wrapper to install pip requirements with local paths
-uv_pip_install_wrapper() {
-    local req_file="$1"
-    shift
-    local args=("$@")
-    
-    local TEMP_REQ=$(mktemp)
-    create_local_requirements "$req_file" "$TEMP_REQ"
-    
-    # Special Apex handling for reason target
-    if [[ "$req_file" == *"megatron.txt"* ]]; then
-        local APEX_WHEEL_URL="https://github.com/RLinf/apex/releases/download/25.09/apex-0.1-cp311-cp311-linux_x86_64.whl"
-        local LOCAL_APEX=$(get_local_wheel_path "$APEX_WHEEL_URL")
-        if [[ "$LOCAL_APEX" != "$APEX_WHEEL_URL" ]]; then
-             sed -i "s|apex @ .*|apex @ file://${LOCAL_APEX}|" "$TEMP_REQ"
-        fi
-    fi
-
-    UV_TORCH_BACKEND=auto uv pip install -r "$TEMP_REQ" "${args[@]}"
-    rm -f "$TEMP_REQ"
-}
 
 # Helper to prefer local wheel for specific packages
 install_local_wheel_if_exists() {
@@ -276,6 +416,15 @@ setup_build_env() {
     # Prefer system/conda python over managed ones
     export UV_PYTHON_PREFERENCE="${UV_PYTHON_PREFERENCE:-system}"
     
+    # ManiSkill Settings
+    # Skip download prompts (auto-confirm downloads)
+    export MS_SKIP_ASSET_DOWNLOAD_PROMPT="${MS_SKIP_ASSET_DOWNLOAD_PROMPT:-1}"
+    # Set asset directory (will be set per-venv if using venv)
+    export MS_ASSET_DIR="${MS_ASSET_DIR:-$HOME/.maniskill}"
+    # Disable network downloads if no network access (e.g., Docker with limited network)
+    # Set MS_NO_NETWORK=1 to fail fast if assets are missing instead of attempting download
+    export MS_NO_NETWORK="${MS_NO_NETWORK:-0}"
+    
     echo "Environment variables exported:"
     echo "  PIP_INDEX_URL=$PIP_INDEX_URL"
     echo "  HF_HOME=$HF_HOME"
@@ -283,6 +432,8 @@ setup_build_env() {
     echo "  UV_LINK_MODE=$UV_LINK_MODE"
     echo "  UV_PYTHON_DOWNLOADS=$UV_PYTHON_DOWNLOADS"
     echo "  UV_PYTHON_PREFERENCE=$UV_PYTHON_PREFERENCE"
+    echo "  MS_SKIP_ASSET_DOWNLOAD_PROMPT=$MS_SKIP_ASSET_DOWNLOAD_PROMPT"
+    echo "  MS_ASSET_DIR=$MS_ASSET_DIR"
 }
 
 # Utility to mimic switch_env (optional installation)
