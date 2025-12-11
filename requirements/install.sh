@@ -14,8 +14,21 @@ TEST_BUILD=${TEST_BUILD:-0}
 SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
-# Source local install helpers
-source "$SCRIPT_DIR/install_local_utils.sh"
+# Source local install helpers (order matters: utils -> route -> prepare)
+source "$SCRIPT_DIR/install_local/url_replace.sh"
+source "$SCRIPT_DIR/install_local/route.sh"
+source "$SCRIPT_DIR/install_local/prepare.sh"
+
+# List of requirements files referenced by installs
+REQ_FILES=(
+    "$SCRIPT_DIR/embodied/models/openvla.txt"
+    "$SCRIPT_DIR/embodied/models/openvla_oft.txt"
+    "$SCRIPT_DIR/embodied/models/openpi.txt"
+    "$SCRIPT_DIR/embodied/envs/maniskill.txt"
+    "$SCRIPT_DIR/embodied/envs/metaworld.txt"
+    "$SCRIPT_DIR/reason/megatron.txt"
+)
+
 
 SUPPORTED_TARGETS=("embodied" "reason" "prepare")
 SUPPORTED_MODELS=("openvla" "openvla-oft" "openpi")
@@ -141,7 +154,7 @@ create_and_sync_venv() {
         # shellcheck disable=SC1090
         source "$VENV_DIR/bin/activate"
     fi
-    uv_sync_wrapper --active
+    UV_TORCH_BACKEND=auto uv sync --active
 }
 
 install_prebuilt_flash_attn() {
@@ -151,18 +164,38 @@ install_prebuilt_flash_attn() {
 
     # Detect Python tags
     local py_major py_minor
-    py_major=$(python -c 'import sys; print(sys.version_info.major)')
-    py_minor=$(python -c 'import sys; print(sys.version_info.minor)')
-    local py_tag="cp${py_major}${py_minor}"
+    py_major=$(python - <<'EOF'
+import sys
+print(sys.version_info.major)
+EOF
+)
+    py_minor=$(python - <<'EOF'
+import sys
+print(sys.version_info.minor)
+EOF
+)
+    local py_tag="cp${py_major}${py_minor}"   # e.g. cp311
     local abi_tag="${py_tag}"                 # we assume cpXY-cpXY ABI, adjust if needed
 
     # Detect torch version (major.minor) and strip dots, e.g. 2.6.0 -> 26
     local torch_mm
-    torch_mm=$(python -c 'import torch; v = torch.__version__.split("+")[0]; parts = v.split("."); print(f"{parts[0]}.{parts[1]}")')
+    torch_mm=$(python - <<'EOF'
+import torch
+v = torch.__version__.split("+")[0]
+parts = v.split(".")
+print(f"{parts[0]}.{parts[1]}")
+EOF
+)
 
     # Detect CUDA major, e.g. 12 from 12.4
     local cuda_major
-    cuda_major=$(python -c 'import torch; from packaging.version import Version; v = Version(torch.version.cuda); print(v.base_version.split(".")[0])')
+    cuda_major=$(python - <<'EOF'
+import torch
+from packaging.version import Version
+v = Version(torch.version.cuda)
+print(v.base_version.split(".")[0])
+EOF
+)
 
     local cu_tag="cu${cuda_major}"            # e.g. cu12
     local torch_tag="torch${torch_mm}"        # e.g. torch2.6
@@ -172,35 +205,40 @@ install_prebuilt_flash_attn() {
     local cxx_abi="cxx11abiFALSE"
 
     local wheel_name="flash_attn-${flash_ver}+${cu_tag}${torch_tag}${cxx_abi}-${py_tag}-${abi_tag}-${platform_tag}.whl"
-    local wheel_url="${base_url}/${wheel_name}"
-
     uv pip uninstall flash-attn || true
-    install_local_wheel_if_exists "${wheel_url}"
+    install_local_wheel_if_exists "${base_url}/${wheel_name}"
 }
 
 install_prebuilt_apex() {
     # Example URL: https://github.com/RLinf/apex/releases/download/25.09/apex-0.1-cp311-cp311-linux_x86_64.whl
     local base_url="https://github.com/RLinf/apex/releases/download/25.09"
     local py_major py_minor
-    py_major=$(python -c 'import sys; print(sys.version_info.major)')
-    py_minor=$(python -c 'import sys; print(sys.version_info.minor)')
+    py_major=$(python - <<'EOF'
+import sys
+print(sys.version_info.major)
+EOF
+)
+    py_minor=$(python - <<'EOF'
+import sys
+print(sys.version_info.minor)
+EOF
+)
     local py_tag="cp${py_major}${py_minor}"   # e.g. cp311
     local abi_tag="${py_tag}"                 # we assume cpXY-cpXY ABI, adjust if needed
     local platform_tag="linux_x86_64"
     local wheel_name="apex-0.1-${py_tag}-${abi_tag}-${platform_tag}.whl"
-    local wheel_url="${base_url}/${wheel_name}"
         
     uv pip uninstall apex || true
     # Try local first, if not found (function handles it), then install from URL.
     # If install fails (e.g. 404), echo error.
-    local local_wheel=$(get_local_wheel_path "$wheel_url")
+    local local_wheel=$(get_local_wheel_path "${base_url}/${wheel_name}")
     uv pip install "${local_wheel}" || (echo "Apex wheel is not available for Python ${py_major}.${py_minor}, please install apex manually. See https://github.com/NVIDIA/apex" >&2; exit 1)
 }
 
 #=======================EMBODIED INSTALLERS=======================
 
 install_common_embodied_deps() {
-    uv_sync_wrapper --extra embodied --active
+    uv sync --extra embodied --active
     bash $SCRIPT_DIR/embodied/sys_deps.sh
     
     add_env_var "NVIDIA_DRIVER_CAPABILITIES" "all"
@@ -222,7 +260,7 @@ install_openvla_model() {
             exit 1
             ;;
     esac
-    UV_TORCH_BACKEND=auto uv_pip_install_wrapper $SCRIPT_DIR/embodied/models/openvla.txt --no-build-isolation
+    UV_TORCH_BACKEND=auto uv pip install -r $SCRIPT_DIR/embodied/models/openvla.txt --no-build-isolation
     install_prebuilt_flash_attn
     uv pip uninstall pynvml || true
 }
@@ -235,7 +273,7 @@ install_openvla_oft_model() {
             PYTHON_VERSION="3.10"
             create_and_sync_venv
             install_common_embodied_deps
-            UV_TORCH_BACKEND=auto uv_pip_install_wrapper $SCRIPT_DIR/embodied/models/openvla_oft.txt --no-build-isolation
+            UV_TORCH_BACKEND=auto uv pip install -r $SCRIPT_DIR/embodied/models/openvla_oft.txt --no-build-isolation
             install_behavior_env
             ;;
         maniskill_libero)
@@ -243,7 +281,7 @@ install_openvla_oft_model() {
             install_common_embodied_deps
             install_maniskill_libero_env
             install_prebuilt_flash_attn
-            UV_TORCH_BACKEND=auto uv_pip_install_wrapper $SCRIPT_DIR/embodied/models/openvla_oft.txt --no-build-isolation
+            UV_TORCH_BACKEND=auto uv pip install -r $SCRIPT_DIR/embodied/models/openvla_oft.txt --no-build-isolation
             ;;
         *)
             echo "Environment '$ENV_NAME' is not supported for OpenVLA-OFT model." >&2
@@ -261,13 +299,13 @@ install_openpi_model() {
             create_and_sync_venv
             install_common_embodied_deps
             install_maniskill_libero_env
-            UV_TORCH_BACKEND=auto GIT_LFS_SKIP_SMUDGE=1 uv_pip_install_wrapper $SCRIPT_DIR/embodied/models/openpi.txt
+            UV_TORCH_BACKEND=auto GIT_LFS_SKIP_SMUDGE=1 uv pip install -r $SCRIPT_DIR/embodied/models/openpi.txt
             install_prebuilt_flash_attn
             ;;
         metaworld)
             create_and_sync_venv
             install_common_embodied_deps
-            UV_TORCH_BACKEND=auto GIT_LFS_SKIP_SMUDGE=1 uv_pip_install_wrapper $SCRIPT_DIR/embodied/models/openpi.txt
+            UV_TORCH_BACKEND=auto GIT_LFS_SKIP_SMUDGE=1 uv pip install -r $SCRIPT_DIR/embodied/models/openpi.txt
             install_prebuilt_flash_attn
             install_metaworld_env
             ;;
@@ -279,11 +317,15 @@ install_openpi_model() {
 
     # Replace transformers models with OpenPI's modified versions
     local py_major_minor
-    py_major_minor=$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+    py_major_minor=$(python - <<'EOF'
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}")
+EOF
+)
     cp -r "$VENV_DIR/lib/python${py_major_minor}/site-packages/openpi/models_pytorch/transformers_replace/"* \
         "$VENV_DIR/lib/python${py_major_minor}/site-packages/transformers/"
     
-    bash $SCRIPT_DIR/embodied/download_assets.sh --assets openpi
+    deploy_openpi_assets "$VENV_DIR"
     uv pip uninstall pynvml || true
 }
 
@@ -306,10 +348,10 @@ install_maniskill_libero_env() {
 
     uv pip install -e "$libero_dir"
     add_env_var "PYTHONPATH" "$(realpath "$libero_dir"):\$PYTHONPATH"
-    uv_pip_install_wrapper $SCRIPT_DIR/embodied/envs/maniskill.txt
+    UV_TORCH_BACKEND=auto uv pip install -r $SCRIPT_DIR/embodied/envs/maniskill.txt
 
-    # Maniskill assets
-    bash $SCRIPT_DIR/embodied/download_assets.sh --assets maniskill
+    # Deploy ManiSkill assets (smart: uses local cache if available)
+    deploy_maniskill_assets "$VENV_DIR"
 }
 
 install_behavior_env() {
@@ -346,7 +388,7 @@ install_metaworld_env() {
 #=======================REASONING INSTALLER=======================
 
 install_reason() {
-    uv_sync_wrapper --extra sglang-vllm --active
+    uv sync --extra sglang-vllm --active
 
     # Megatron-LM
     # Prefer an existing checkout if MEGATRON_PATH is provided; otherwise clone into the venv.
@@ -367,7 +409,7 @@ install_reason() {
 
     # If TEST_BUILD is 1, skip installing megatron.txt
     if [ "$TEST_BUILD" -ne 1 ]; then
-        APEX_CPP_EXT=1 APEX_CUDA_EXT=1 NVCC_APPEND_FLAGS="--threads 24" APEX_PARALLEL_BUILD=24 uv_pip_install_wrapper $SCRIPT_DIR/reason/megatron.txt --no-build-isolation
+        UV_TORCH_BACKEND=auto APEX_CPP_EXT=1 APEX_CUDA_EXT=1 NVCC_APPEND_FLAGS="--threads 24" APEX_PARALLEL_BUILD=24 uv pip install -r $SCRIPT_DIR/reason/megatron.txt --no-build-isolation
     fi
 
     install_prebuilt_apex
@@ -377,6 +419,13 @@ install_reason() {
 
 main() {
     parse_args "$@"
+
+    # Patch files for non-prepare targets (trap EXIT will restore on any exit)
+    if [ "$TARGET" != "prepare" ]; then
+        # Ensure backup files are restored on any exit (success, failure, or interruption)
+        trap 'restore_all_backups' EXIT
+        patch_all_files_for_install
+    fi
 
     case "$TARGET" in
         prepare)
@@ -425,6 +474,8 @@ main() {
             exit 1
             ;;
     esac
+    
+    # Note: Backup files will be restored by trap EXIT
 }
 
 main "$@"
