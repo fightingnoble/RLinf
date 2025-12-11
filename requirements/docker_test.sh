@@ -34,10 +34,14 @@
 
 set -e
 
+
 REPO_ROOT="/home/zhangchenguang/git_repo/RLinf"
 CONTAINER_NAME="rlinf_local"
 IMAGE_NAME="rlinf-zsh"
 CACHE_DIR="/cache/z30081742/rlinf/repos"
+CONTAINER_USER="appuser"
+CONTAINER_HOME="/home/${CONTAINER_USER}"
+CONTAINER_WORKDIR="${CONTAINER_HOME}/git_repo/RLinf"
 
 echo "============================================================"
 echo "  RLinf 端到端离线安装测试"
@@ -52,8 +56,15 @@ cd "$REPO_ROOT"
 docker stop "$CONTAINER_NAME" 2>/dev/null && docker rm "$CONTAINER_NAME" 2>/dev/null && echo "✓ 容器已清理" || echo "✓ 无需清理"
 echo ""
 
+# 清理项目目录下的生成文件和备份文件
+cd /home/zhangchenguang/git_repo/RLinf
+./requirements/install_local/restore.sh
+rm -rf .venv uv.lock pyproject.toml.backup
+find requirements -name "*.backup" -type f -delete
+
+
 # ============================================================
-# 步骤 2: 启动新容器
+# 步骤 2: 启动新容器并且清理环境
 # ============================================================
 echo "[Step 2/5] 启动新容器..."
 docker run -d --gpus all \
@@ -61,10 +72,10 @@ docker run -d --gpus all \
   --net=host \
   --name "$CONTAINER_NAME" \
   -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics \
-  -v "$REPO_ROOT:/root/git_repo/RLinf" \
+  -v "$REPO_ROOT:${CONTAINER_WORKDIR}" \
   -v "$REPO_ROOT/docker/torch-2.6/repos:$CACHE_DIR" \
   -e extrenal_repo="$CACHE_DIR" \
-  -w /root/git_repo/RLinf \
+  -w "${CONTAINER_WORKDIR}" \
   "$IMAGE_NAME" sleep infinity
 
 if [ $? -eq 0 ]; then
@@ -74,23 +85,30 @@ else
   exit 1
 fi
 echo ""
+# 确保容器内的 uv 缓存是干净的
+docker exec "$CONTAINER_NAME" bash -c "cd ${CONTAINER_WORKDIR} && uv cache clean"
+docker exec "$CONTAINER_NAME" bash -c "cd ${CONTAINER_WORKDIR} && rm -rf .venv uv.lock pyproject.toml.backup requirements/*.backup" && echo "Cleanup inside container successful"
 
 # ============================================================
 # 步骤 3: 运行 prepare 阶段
 # ============================================================
+# 准备本地安装所需的依赖
+pip install gsutil
+bash requirements/install_local/download.sh
+
 echo "[Step 3/5] 运行 prepare 阶段（安装 Python 3.11）..."
 docker exec "$CONTAINER_NAME" bash -c "
-cd /root/git_repo/RLinf
-bash requirements/install.sh prepare --python /usr/bin/python3.11 2>&1 | tail -20
+cd ${CONTAINER_WORKDIR}
+sudo --preserve-env=extrenal_repo bash requirements/install.sh prepare --python /usr/bin/python3.11 
 "
 echo ""
 
 # ============================================================
-# 步骤 4: 清理环境并运行 embodied 安装
+# 步骤 4: 运行 embodied 安装
 # ============================================================
 echo "[Step 4/5] 运行 embodied 安装..."
 docker exec "$CONTAINER_NAME" bash -c "
-cd /root/git_repo/RLinf
+cd ${CONTAINER_WORKDIR}
 rm -rf .venv uv.lock pyproject.toml.backup
 echo '========================================'
 echo 'Embodied Installation'
@@ -100,7 +118,7 @@ echo '  extrenal_repo: '\$extrenal_repo
 echo '  Python: /usr/bin/python3.11'
 echo ''
 
-bash requirements/install.sh embodied --model openvla --env maniskill_libero --python /usr/bin/python3.11 2>&1 | tee /tmp/install_full.log
+sudo --preserve-env=extrenal_repo bash requirements/install.sh embodied --model openvla --env maniskill_libero --python /usr/bin/python3.11 2>&1 | tee /tmp/install_full.log
 "
 
 if [ $? -eq 0 ]; then
@@ -120,7 +138,7 @@ echo "[Step 5/5] 验证安装结果..."
 echo ""
 
 docker exec "$CONTAINER_NAME" bash -c "
-cd /root/git_repo/RLinf
+cd ${CONTAINER_WORKDIR}
 
 echo '============================================================'
 echo '  关键依赖来源检查'
