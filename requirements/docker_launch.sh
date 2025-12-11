@@ -21,12 +21,8 @@ HOST_UID="${HOST_UID:-$(id -u)}"
 HOST_GID="${HOST_GID:-$(id -g)}"
 NO_MIRROR="${NO_MIRROR:-}"
 
-# Validate required config
-if [ -z "$PROXY_HOST" ] || [ -z "$SSH_KEY_EMAIL" ]; then
-  echo "Error: PROXY_HOST and SSH_KEY_EMAIL must be set."
-  echo "Please create requirements/config.local.sh based on config.local.sh.example"
-  exit 1
-fi
+# Note: PROXY_HOST and SSH_KEY_EMAIL are optional
+# If not set, Dockerfile will skip proxy configuration and SSH key generation
 
 # Setup cache directory for offline test simulation
 CACHE_MOUNT=""
@@ -48,13 +44,18 @@ echo "Building Docker image: $IMAGE_NAME"
 echo "=========================================="
 
 # Build Docker image with configurable arguments
+# Only pass build args if they are set
+BUILD_ARGS=(
+  --build-arg HOST_UID="$HOST_UID"
+  --build-arg HOST_GID="$HOST_GID"
+)
+[ -n "$PROXY_HOST" ] && BUILD_ARGS+=(--build-arg PROXY_HOST="$PROXY_HOST")
+[ -n "$PROXY_PORT" ] && BUILD_ARGS+=(--build-arg PROXY_PORT="$PROXY_PORT")
+[ -n "$SSH_KEY_EMAIL" ] && BUILD_ARGS+=(--build-arg SSH_KEY_EMAIL="$SSH_KEY_EMAIL")
+[ -n "$NO_MIRROR" ] && BUILD_ARGS+=(--build-arg NO_MIRROR="$NO_MIRROR")
+
 docker build \
-  --build-arg PROXY_HOST="$PROXY_HOST" \
-  --build-arg PROXY_PORT="$PROXY_PORT" \
-  --build-arg SSH_KEY_EMAIL="$SSH_KEY_EMAIL" \
-  --build-arg HOST_UID="$HOST_UID" \
-  --build-arg HOST_GID="$HOST_GID" \
-  ${NO_MIRROR:+--build-arg NO_MIRROR=$NO_MIRROR} \
+  "${BUILD_ARGS[@]}" \
   -f "$REPO_ROOT/docker/Dockerfile.zsh" \
   -t "$IMAGE_NAME" \
   "$REPO_ROOT"
