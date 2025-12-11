@@ -1,0 +1,27 @@
+#!/bin/bash
+# ============================================================
+# 本地配置文件示例
+# ============================================================
+# 
+# 使用方法：
+# 1. 复制此文件为 config.local.sh
+# 2. 根据实际情况修改配置值
+# 3. config.local.sh 已被 .gitignore 忽略，不会提交到仓库
+#
+# ============================================================
+
+# 代理配置（用于 Docker 构建和网络访问）
+export PROXY_HOST="${PROXY_HOST:-your.proxy.com}"
+export PROXY_PORT="${PROXY_PORT:-1080}"
+
+# SSH 密钥邮箱（用于生成 SSH 密钥）
+export SSH_KEY_EMAIL="${SSH_KEY_EMAIL:-your@email.com}"
+
+# 本地缓存目录（容器内路径）
+# 注意：这是容器内的路径，宿主机的 repos 目录会挂载到这里
+# 请根据实际情况修改此路径
+export CACHE_DIR="${CACHE_DIR:-/cache/your_username/rlinf/repos}"
+
+# 项目根目录（可选，默认自动检测）
+# export REPO_ROOT="${REPO_ROOT:-/path/to/RLinf}"
+

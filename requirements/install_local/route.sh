@@ -4,7 +4,7 @@
 # Assuming this script is sourced from requirements/install.sh
 # SCRIPT_DIR is defined in install.sh as requirements/
 WORKSPACE="$(dirname "$SCRIPT_DIR")"
-DOWNLOAD_DIR="${extrenal_repo:-${WORKSPACE}/docker/torch-2.6/repos}"
+DOWNLOAD_DIR="${external_repo:-${WORKSPACE}/docker/torch-2.6/repos}"
 
 
 # Function to get local path for a git URL

@@ -2,10 +2,14 @@ FROM docker.1ms.run/nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
 
 # Configurable arguments
 # Usage: docker build --build-arg PROXY_HOST=your.proxy.com --build-arg PROXY_PORT=1080 --build-arg SSH_KEY_EMAIL=your@email.com
-ARG PROXY_HOST=222.29.97.81
-ARG PROXY_PORT=1080
-ARG SSH_KEY_EMAIL=zhangchg@stu.pku.edu.cn
+# Note: Default values should be set via config.local.sh in requirements/
+ARG PROXY_HOST
+ARG PROXY_PORT
+ARG SSH_KEY_EMAIL
 ARG NO_MIRROR
+# Keep UID/GID in sync with host to avoid root-owned artifacts on mounts
+ARG HOST_UID=1000
+ARG HOST_GID=1000
 
 SHELL ["/bin/bash", "-c"]
 ENV PATH=/opt/conda/bin:$PATH
@@ -63,7 +67,22 @@ RUN sed -i 's/plugins=(git)/plugins=(git zsh-completions zsh-syntax-highlighting
     echo "alias proxy_en='export https_proxy=\"${PROXY_URL}\";export http_proxy=\"${PROXY_URL}\"'" >> ~/.zshrc && \
     echo "alias proxy_dis='unset https_proxy;unset http_proxy'" >> ~/.zshrc
 
-WORKDIR /workspace
+# Create host-matching user with passwordless sudo for occasional privileged commands
+RUN groupadd -g ${HOST_GID} appuser && \
+    useradd -m -u ${HOST_UID} -g ${HOST_GID} -s /bin/zsh appuser && \
+    mkdir -p /etc/sudoers.d && \
+    echo "appuser ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/appuser && \
+    chmod 0440 /etc/sudoers.d/appuser && \
+    (getent group docker >/dev/null || groupadd -r docker) && \
+    usermod -aG docker,sudo appuser
+
+# Default to the unprivileged user; use sudo when escalation is required
+USER appuser
+
+ENV UMASK=0002
+
+# Ensure a user-writable workspace by default
+WORKDIR /home/appuser
 
 CMD ["/bin/zsh"]
 

@@ -20,3 +20,6 @@ rlinf/envs/maniskill/assets
 # zhangchg local installation
 workspace
 docker/torch-2.6/repos
+requirements/config.local.sh
+*.patched
+pyproject.toml.patched
