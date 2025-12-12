@@ -17,12 +17,24 @@ cp requirements/config.local.sh.example requirements/config.local.sh
 # 编辑 config.local.sh，填入你的实际配置
 ```
 
-配置文件包含以下隐私信息（不会被提交到 Git）：
+配置文件包含以下信息（不会被提交到 Git）：
+
+**必需配置**：
+- `CACHE_DIR`: **宿主机的缓存目录路径**（绝对路径）
+  - 这是 `download.sh` 的下载目标
+  - Docker 模式下会挂载到容器内的 `CONTAINER_CACHE_DIR`
+
+**可选配置**：
+- `CONTAINER_CACHE_DIR`: Docker 容器内的挂载点路径（默认：`/cache/repos`）
 - `PROXY_HOST`: 代理服务器地址
 - `PROXY_PORT`: 代理服务器端口
 - `SSH_KEY_EMAIL`: SSH 密钥邮箱
-- `CACHE_DIR`: 容器内缓存目录路径
-- `REPO_ROOT`: 项目根目录（可选，默认自动检测）
+- `REPO_ROOT`: 项目根目录（默认自动检测）
+
+**变量说明**：
+- **`CACHE_DIR`**（配置层）：宿主机真实存储路径
+- **`CONTAINER_CACHE_DIR`**（配置层）：容器内挂载点
+- **`external_repo`**（运行时层）：由 `docker_test.sh` 自动设置，所有 `install_local/*.sh` 脚本通过此变量访问缓存
 
 **重要**：`config.local.sh` 已被 `.gitignore` 忽略，请妥善保管。
 
@@ -96,8 +108,7 @@ bash requirements/install_local/download.sh
 
 ### 步骤 2：运行安装
 
-推荐通过统一入口脚本 `requirements/docker_test.sh`，支持 Docker 和本地两种模式。
-设置CACHE_DIR 为下载依赖的目录。
+推荐通过统一入口脚本 `requirements/docker_test.sh`，支持 Docker 和本地两种模式。离线缓存根目录使用 `external_repo`（主变量），Docker 模式会将 `CACHE_DIR` 映射到 `external_repo`。
 
 Docker 模式适合无法使用预编译版本docker，但是有docker权限的用户。
 本地模式适用于开发环境已经是docker内部，无法再安装docker的情况。
@@ -112,10 +123,12 @@ bash requirements/docker_test.sh --mode docker
 ```
 
 **流程：**
-1. 检查/下载本地依赖：`requirements/install_local/download.sh`
+1. 检查/下载本地依赖：`requirements/install_local/download.sh`（下载到宿主机的 `$CACHE_DIR`）
 2. 清理环境、还原备份：`requirements/install_local/restore.sh`
 3. 构建 Docker 镜像：`requirements/docker_launch.sh`（传递宿主 UID/GID）
-4. 启动容器并挂载本地缓存：`docker/torch-2.6/repos -> $CACHE_DIR`（CACHE_DIR 在 config.local.sh 中配置）
+4. 启动容器并挂载缓存：`-v $CACHE_DIR:$CONTAINER_CACHE_DIR -e external_repo=$CONTAINER_CACHE_DIR`
+   - 宿主机的 `CACHE_DIR` 挂载到容器内的 `CONTAINER_CACHE_DIR`（默认 `/cache/repos`）
+   - 容器内通过 `external_repo` 环境变量访问缓存
 5. 容器内执行安装：`requirements/install_local_wrap.sh`
    - 清理 uv 缓存和虚拟环境
    - Prepare 阶段：安装 Python 3.11 和系统依赖
@@ -133,9 +146,10 @@ bash requirements/docker_test.sh --mode local
 ```
 
 **流程：**
-1. 检查/下载本地依赖：`requirements/install_local/download.sh`
+1. 检查/下载本地依赖：`requirements/install_local/download.sh`（下载到 `$CACHE_DIR`）
 2. 清理环境、还原备份：`requirements/install_local/restore.sh`
-3. 设置环境变量：`external_repo=$CACHE_DIR`（CACHE_DIR 在 config.local.sh 中配置）
+3. 设置环境变量：`export external_repo=$CACHE_DIR`
+   - 本地模式下，`external_repo` 直接指向宿主机的 `CACHE_DIR`
 4. 直接执行安装：`requirements/install_local_wrap.sh`（同 Docker 模式）
 5. 日志输出：`/tmp/install_full.log`
 

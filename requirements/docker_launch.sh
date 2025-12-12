@@ -24,20 +24,6 @@ NO_MIRROR="${NO_MIRROR:-}"
 # Note: PROXY_HOST and SSH_KEY_EMAIL are optional
 # If not set, Dockerfile will skip proxy configuration and SSH key generation
 
-# Setup cache directory for offline test simulation
-CACHE_MOUNT=""
-CACHE_ENV=""
-if [ -z "$CACHE_DIR" ]; then
-  echo "Error: CACHE_DIR must be set in config.local.sh"
-  echo "Please create requirements/config.local.sh based on config.local.sh.example"
-  exit 1
-fi
-TARGET_CACHE_DIR="$CACHE_DIR"
-if [ -d "$REPO_ROOT/docker/torch-2.6/repos" ]; then
-    CACHE_MOUNT="-v $REPO_ROOT/docker/torch-2.6/repos:$TARGET_CACHE_DIR"
-    CACHE_ENV="-e external_repo=$TARGET_CACHE_DIR"
-    echo "Mounting repos to: $TARGET_CACHE_DIR"
-fi
 
 echo "=========================================="
 echo "Building Docker image: $IMAGE_NAME"

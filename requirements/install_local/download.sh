@@ -4,15 +4,23 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # SCRIPT_DIR is requirements/install_local/, need to go up two levels to project root
 WORKSPACE="$(cd "$SCRIPT_DIR/../.." && pwd)"
-DOWNLOAD_DIR="${WORKSPACE}/docker/torch-2.6/repos"
-WHEELS_DIR="${DOWNLOAD_DIR}/wheels"
-ASSETS_DIR="${DOWNLOAD_DIR}/assets"
+
+# Load config to get CACHE_DIR (宿主机路径)
+CONFIG_FILE="$SCRIPT_DIR/../config.local.sh"
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+fi
+
+# Download target: prefer CACHE_DIR from config, fallback to repo default
+CACHE_DIR="${CACHE_DIR:-${WORKSPACE}/docker/torch-2.6/repos}"
+WHEELS_DIR="${CACHE_DIR}/wheels"
+ASSETS_DIR="${CACHE_DIR}/assets"
 
 echo "========================================"
-echo "Downloading dependencies to: $DOWNLOAD_DIR"
+echo "Downloading dependencies to: $CACHE_DIR"
 echo "========================================"
 
-mkdir -p "$DOWNLOAD_DIR"
+mkdir -p "$CACHE_DIR"
 mkdir -p "$WHEELS_DIR"
 mkdir -p "$ASSETS_DIR"
 
@@ -37,7 +45,7 @@ REPOS=(
 
 for repo_info in "${REPOS[@]}"; do
     read -r url target_name branch <<< "$repo_info"
-    target_path="${DOWNLOAD_DIR}/${target_name}"
+    target_path="${CACHE_DIR}/${target_name}"
     
     echo ""
     echo "[CLONE] Cloning $target_name..."
