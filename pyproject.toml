@@ -87,6 +87,7 @@ embodied = [
 
 [tool.uv]
 prerelease = "allow"
+native-tls = true
 conflicts = [
     [
       { extra = "sglang-vllm" },
@@ -101,6 +102,16 @@ override-dependencies = [
     "uvloop==0.21.0",
     "tensorflow-addons==0.23.0",
 ]
+
+# 配置 PyPI 镜像源 - 使用清华源（SSL 更稳定）
+[[tool.uv.index]]
+name = "tsinghua"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
 
 [tool.ruff]
 line-length = 88

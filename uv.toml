@@ -1,0 +1,11 @@
+# uv configuration for this project
+native-tls = true
+
+[pip]
+# 使用清华源（SSL 证书更稳定）
+index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+# 额外的镜像源
+extra-index-url = [
+    "https://pypi.org/simple"
+]
