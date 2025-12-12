@@ -8,7 +8,7 @@
 # 测试环境：
 #   - Docker 镜像: rlinf-zsh (基于 nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04)
 #   - Python 版本: 3.11 (通过 prepare 阶段安装)
-#   - 本地缓存: 由 config.local.sh 中的 CACHE_DIR 配置（挂载自 docker/torch-2.6/repos）
+#   - 本地缓存: 由 config.local.sh 中的 CACHE_DIR 配置（默认 docker/torch-2.6/repos）
 #   - 安装目标: embodied --model openvla --env maniskill_libero
 # 
 # 支持 Docker / 本地双模式，核心安装逻辑在 requirements/install_local_wrap.sh
@@ -68,8 +68,7 @@ echo ""
 # 步骤 1: 检查本地下载
 # ============================================================
 echo "[Step 1] 检查本地下载..."
-pip install gsutil
-bash requirements/install_local/download.sh
+bash requirements/install_local/download.sh --check-only
 echo ""
 
 # ============================================================
@@ -77,6 +76,9 @@ echo ""
 # ============================================================
 echo "[Step 2] 清理项目目录..."
 cd "$REPO_ROOT"
+if [ "$MODE" = "docker" ]; then
+  docker run --rm -v "$(pwd):/data" ubuntu:latest chown -R $(id -u):$(id -g) /data
+fi
 ./requirements/install_local/restore.sh
 rm -rf .venv uv.lock pyproject.toml.backup
 find requirements -name "*.backup" -type f -delete

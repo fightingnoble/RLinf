@@ -16,7 +16,6 @@
 
 set -e
 
-docker run --rm -v "$(pwd):/data" ubuntu:latest chown -R $(id -u):$(id -g) /data
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # SCRIPT_DIR 现在是 requirements/install_local/, 需要向上两级到项目根目录
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -192,6 +191,9 @@ echo "============================================================"
 echo -e "${CYAN}还原配置文件 (requirements/*.txt, pyproject.toml)${NC}"
 echo "============================================================"
 echo ""
+
+# 切换回项目根目录（之前在 REPOS_DIR 中执行 git 操作）
+cd "$PROJECT_ROOT"
 
 REQUIREMENTS_DIR="${PROJECT_ROOT}/requirements"
 
