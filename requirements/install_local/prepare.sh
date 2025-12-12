@@ -45,7 +45,18 @@ install_system_deps() {
 setup_build_env() {
     echo "=== Setting up Build Environment ==="
     
+    # Load local configuration if exists (config.local.sh is in requirements/ directory)
+    # SCRIPT_DIR is defined in install.sh as requirements/
+    if [ -n "${SCRIPT_DIR:-}" ]; then
+        if [ -f "${SCRIPT_DIR}/config.local.sh" ]; then
+            source "${SCRIPT_DIR}/config.local.sh"
+        elif [ -f "${SCRIPT_DIR}/../config.local.sh" ]; then
+            source "${SCRIPT_DIR}/../config.local.sh"
+        fi
+    fi
+    
     # Pip Mirror (Session level)
+    # Can be overridden by config.local.sh
     export PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.bfsu.edu.cn/pypi/web/simple}"
     
     # Upgrade core tools
@@ -57,6 +68,7 @@ setup_build_env() {
     mkdir -p "$HF_HOME"
     
     # UV Settings
+    # Can be overridden by config.local.sh
     export UV_DEFAULT_INDEX="${UV_DEFAULT_INDEX:-https://mirrors.bfsu.edu.cn/pypi/web/simple}"
     export UV_LINK_MODE="${UV_LINK_MODE:-symlink}"
     
