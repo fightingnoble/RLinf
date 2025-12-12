@@ -27,3 +27,8 @@ export CACHE_DIR="${CACHE_DIR:-/cache/your_username/rlinf/repos}"
 # 【可选】项目根目录（默认自动检测）
 # export REPO_ROOT="${REPO_ROOT:-/path/to/RLinf}"
 
+# 【可选】PyPI 镜像源配置
+# 如果使用离线环境或需要自定义镜像源，可以设置这些变量
+# export PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.bfsu.edu.cn/pypi/web/simple}"
+# export UV_DEFAULT_INDEX="${UV_DEFAULT_INDEX:-https://mirrors.bfsu.edu.cn/pypi/web/simple}"
+
