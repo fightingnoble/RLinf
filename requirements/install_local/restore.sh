@@ -3,7 +3,7 @@
 # Git 仓库还原脚本
 # ============================================================
 # 
-# 用途：将 docker/torch-2.6/repos/ 下所有 Git 仓库还原到干净状态
+# 用途：将缓存目录（CACHE_DIR）下所有 Git 仓库还原到干净状态
 # 
 # 操作：
 #   1. git reset --hard HEAD  - 丢弃所有未提交的修改
@@ -18,10 +18,17 @@ set -e
 
 docker run --rm -v "$(pwd):/data" ubuntu:latest chown -R $(id -u):$(id -g) /data
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# 修正 REPOS_DIR 路径，指向 docker/torch-2.6/repos
 # SCRIPT_DIR 现在是 requirements/install_local/, 需要向上两级到项目根目录
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-REPOS_DIR="${PROJECT_ROOT}/docker/torch-2.6/repos"
+
+# Load config to get CACHE_DIR (宿主机路径)
+CONFIG_FILE="$SCRIPT_DIR/../config.local.sh"
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+fi
+
+# Use CACHE_DIR from config, fallback to repo default
+REPOS_DIR="${CACHE_DIR:-${PROJECT_ROOT}/docker/torch-2.6/repos}"
 
 # 颜色定义
 RED='\033[0;31m'
@@ -186,7 +193,6 @@ echo -e "${CYAN}还原配置文件 (requirements/*.txt, pyproject.toml)${NC}"
 echo "============================================================"
 echo ""
 
-# PROJECT_ROOT 已在上面定义
 REQUIREMENTS_DIR="${PROJECT_ROOT}/requirements"
 
 # 1. 还原 requirements 目录下的 .txt 文件

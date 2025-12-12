@@ -3,8 +3,8 @@
 # Local download directory
 # Assuming this script is sourced from requirements/install.sh
 # SCRIPT_DIR is defined in install.sh as requirements/
+# external_repo is set by docker_test.sh or defaults to repo-internal path
 WORKSPACE="$(dirname "$SCRIPT_DIR")"
-DOWNLOAD_DIR="${external_repo:-${WORKSPACE}/docker/torch-2.6/repos}"
 
 # Install system dependencies (apt-get)
 install_system_deps() {
@@ -53,6 +53,11 @@ setup_build_env() {
         elif [ -f "${SCRIPT_DIR}/../config.local.sh" ]; then
             source "${SCRIPT_DIR}/../config.local.sh"
         fi
+    fi
+
+    # Align external_repo with CACHE_DIR if only CACHE_DIR is provided
+    if [ -z "${external_repo:-}" ] && [ -n "${CACHE_DIR:-}" ]; then
+        export external_repo="$CACHE_DIR"
     fi
     
     # Pip Mirror (Session level)

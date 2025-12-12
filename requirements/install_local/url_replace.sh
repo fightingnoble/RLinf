@@ -3,8 +3,8 @@
 # Local download directory
 # Assuming this script is sourced from requirements/install.sh
 # SCRIPT_DIR is defined in install.sh as requirements/
+# external_repo is set by docker_test.sh or defaults to repo-internal path
 WORKSPACE="$(dirname "$SCRIPT_DIR")"
-DOWNLOAD_DIR="${external_repo:-${WORKSPACE}/docker/torch-2.6/repos}"
 
 
 # Function to get local path for a wheel URL
@@ -13,7 +13,7 @@ get_local_wheel_path() {
     local filename=$(basename "$wheel_url")
     
     # Check if local wheel exists
-    local local_path="${DOWNLOAD_DIR}/wheels/${filename}"
+    local local_path="${external_repo}/wheels/${filename}"
     if [ -f "$local_path" ]; then
         echo "${local_path}"
     else
@@ -24,11 +24,11 @@ get_local_wheel_path() {
 # Collect all local repos mapping: repo_name -> local_path
 # Output format: one "repo_name|local_path" per line
 collect_local_repos() {
-    if [ ! -d "$DOWNLOAD_DIR" ]; then
+    if [ ! -d "$external_repo" ]; then
         return 0
     fi
     
-    for repo_path in "$DOWNLOAD_DIR"/*; do
+    for repo_path in "$external_repo"/*; do
         if [ -d "$repo_path" ] && [ "$(basename "$repo_path")" != "wheels" ] && [ "$(basename "$repo_path")" != "assets" ]; then
             local repo_name=$(basename "$repo_path")
             echo "${repo_name}|${repo_path}"
@@ -115,10 +115,10 @@ patch_all_files_for_install() {
     done < <(find "$SCRIPT_DIR" -name "*.txt")
 
     # 3. Local repos pyproject.toml
-    if [ -d "$DOWNLOAD_DIR" ]; then
+    if [ -d "$external_repo" ]; then
         while IFS= read -r pyproject; do
             files_to_patch+=("$pyproject")
-        done < <(find "$DOWNLOAD_DIR" -maxdepth 2 -name "pyproject.toml")
+        done < <(find "$external_repo" -maxdepth 2 -name "pyproject.toml")
     fi
 
     local patched_count=0
@@ -152,7 +152,7 @@ restore_all_backups() {
     local restored_count=0
     
     local search_dirs=("$SCRIPT_DIR")
-    if [ -d "$DOWNLOAD_DIR" ]; then search_dirs+=("$DOWNLOAD_DIR"); fi
+    if [ -d "$external_repo" ]; then search_dirs+=("$external_repo"); fi
     
     # Restore root pyproject
     if [ -f "${WORKSPACE}/pyproject.toml.backup" ]; then

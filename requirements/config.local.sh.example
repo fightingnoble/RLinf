@@ -10,10 +10,19 @@
 #
 # ============================================================
 
-# 【必需】本地缓存目录（容器内路径）
-# 注意：这是容器内的路径，宿主机的 repos 目录会挂载到这里
-# 请根据实际情况修改此路径
+# 【必需】宿主机缓存目录（绝对路径）
+# 这是 download.sh 的下载目标，也是 Docker 挂载的源路径
+# 可以是仓库内路径或任意自定义路径，例如：
+#   - $HOME/rlinf/cache/repos
+#   - /cache/your_username/rlinf/repos
+#   - $(pwd)/docker/torch-2.6/repos
 export CACHE_DIR="${CACHE_DIR:-/cache/your_username/rlinf/repos}"
+
+# 【可选】Docker 容器内的挂载点路径
+# 默认: /cache/repos
+# 这是容器内的路径，宿主的 CACHE_DIR 会挂载到这里
+# 安装脚本通过 external_repo 环境变量访问此路径
+# export CONTAINER_CACHE_DIR="${CONTAINER_CACHE_DIR:-/cache/repos}"
 
 # 【可选】代理配置（用于 Docker 构建和网络访问）
 # 如果不需要代理，可以注释掉或留空

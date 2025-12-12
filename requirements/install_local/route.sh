@@ -3,8 +3,8 @@
 # Local download directory
 # Assuming this script is sourced from requirements/install.sh
 # SCRIPT_DIR is defined in install.sh as requirements/
+# external_repo is set by docker_test.sh or defaults to repo-internal path
 WORKSPACE="$(dirname "$SCRIPT_DIR")"
-DOWNLOAD_DIR="${external_repo:-${WORKSPACE}/docker/torch-2.6/repos}"
 
 
 # Function to get local path for a git URL
@@ -26,7 +26,7 @@ get_local_git_path() {
     fi
     
     # Check if local directory exists (flat structure)
-    local local_path="${DOWNLOAD_DIR}/${repo_name}"
+    local local_path="${external_repo}/${repo_name}"
     if [ -d "$local_path" ]; then
         echo "file://${local_path}"
     else
@@ -83,8 +83,8 @@ deploy_maniskill_assets() {
     local local_assets_dir=""
     
     # Check for local assets cache
-    if [ -n "${DOWNLOAD_DIR:-}" ] && [ -d "${DOWNLOAD_DIR}/assets" ]; then
-        local_assets_dir="${DOWNLOAD_DIR}/assets"
+    if [ -n "${external_repo}" ] && [ -d "${external_repo}/assets" ]; then
+        local_assets_dir="${external_repo}/assets"
     fi
     
     # If local cache exists, copy directly and skip download_assets.sh
@@ -117,8 +117,8 @@ deploy_openpi_assets() {
     local local_assets_dir=""
     
     # Check for local assets cache
-    if [ -n "${DOWNLOAD_DIR:-}" ] && [ -d "${DOWNLOAD_DIR}/assets" ]; then
-        local_assets_dir="${DOWNLOAD_DIR}/assets"
+    if [ -n "${external_repo}" ] && [ -d "${external_repo}/assets" ]; then
+        local_assets_dir="${external_repo}/assets"
     fi
     
     # If local cache exists, copy directly and skip download_assets.sh

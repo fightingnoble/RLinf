@@ -28,12 +28,14 @@ fi
 # Configuration (with defaults if not in config.local.sh)
 CONTAINER_NAME="rlinf_local"
 IMAGE_NAME="rlinf-zsh"
-# CACHE_DIR must be set in config.local.sh
+# CACHE_DIR must be set in config.local.sh (宿主机路径)
 if [ -z "$CACHE_DIR" ]; then
   echo "Error: CACHE_DIR must be set in config.local.sh"
   echo "Please create requirements/config.local.sh based on config.local.sh.example"
   exit 1
 fi
+# CONTAINER_CACHE_DIR: 容器内挂载点（默认 /cache/repos）
+CONTAINER_CACHE_DIR="${CONTAINER_CACHE_DIR:-/cache/repos}"
 # REPO_ROOT is already set above from script directory or config.local.sh
 CONTAINER_USER="appuser"
 CONTAINER_HOME="/home/${CONTAINER_USER}"
@@ -99,8 +101,8 @@ if [ "$MODE" = "docker" ]; then
     --name "$CONTAINER_NAME" \
     -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics \
     -v "$REPO_ROOT:${CONTAINER_WORKDIR}" \
-    -v "$REPO_ROOT/docker/torch-2.6/repos:$CACHE_DIR" \
-    -e external_repo="$CACHE_DIR" \
+    -v "$CACHE_DIR:$CONTAINER_CACHE_DIR" \
+    -e external_repo="$CONTAINER_CACHE_DIR" \
     -w "${CONTAINER_WORKDIR}" \
     "$IMAGE_NAME" sleep infinity
 
