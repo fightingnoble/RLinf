@@ -67,7 +67,27 @@ setup_build_env() {
     # Upgrade core tools
     echo "Upgrading pip, setuptools, wheel..."
     python3 -m pip install --upgrade pip setuptools wheel
-    
+
+    # Ensure python3-venv is available for virtual environment creation
+    if ! python3 -c "import venv" 2>/dev/null; then
+        echo "python3-venv not available, attempting to install..."
+        if command -v apt-get &> /dev/null; then
+            local sudo_cmd=""
+            if [ "$EUID" -ne 0 ]; then
+                sudo_cmd="sudo"
+            fi
+            echo "Installing python3-venv via apt-get..."
+            $sudo_cmd apt-get update
+            $sudo_cmd apt-get install -y --no-install-recommends python3-venv
+        else
+            echo "Warning: Could not automatically install python3-venv. Please install it manually:"
+            echo "  Ubuntu/Debian: sudo apt-get install python3-venv"
+            echo "  CentOS/RHEL: sudo yum install python3-venv (or python3-virtualenv)"
+            echo "  Other systems: Please install python3-venv or python-virtualenv package"
+            echo "Continuing without venv capability..."
+        fi
+    fi
+
     # Environment Variables from Dockerfile
     export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
     mkdir -p "$HF_HOME"
