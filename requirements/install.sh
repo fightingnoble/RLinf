@@ -127,7 +127,7 @@ parse_args() {
 }
 
 create_and_sync_venv() {
-    # Ensure build environment is set up (env vars, uv installed)
+    # Ensure build environment is set up (env vars, pip installed)
     setup_build_env
 
     if [ "$USE_CURRENT_ENV" -eq 1 ]; then
@@ -150,11 +150,17 @@ create_and_sync_venv() {
             echo "==========================================" >&2
         fi
         
-        uv venv "$VENV_DIR" --python "$PYTHON_VERSION"
+        if [ ! -d "$VENV_DIR" ]; then
+            echo "Creating virtual environment at $VENV_DIR"
+            python3 -m venv "$VENV_DIR"
+        fi
         # shellcheck disable=SC1090
         source "$VENV_DIR/bin/activate"
     fi
-    UV_TORCH_BACKEND=auto uv sync --active
+    
+    echo "Virtual environment activated: $VENV_DIR"
+    which pip
+    pip install -e .
 }
 
 install_prebuilt_flash_attn() {
