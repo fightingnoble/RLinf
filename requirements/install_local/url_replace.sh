@@ -138,11 +138,6 @@ patch_all_files_for_install() {
     
     echo "[local-deps] Patched $patched_count files."
 
-    # Remove uv.lock to force re-resolution
-    if [ -f "${WORKSPACE}/uv.lock" ]; then
-        echo "[local-deps] Removing uv.lock"
-        rm -f "${WORKSPACE}/uv.lock"
-    fi
     echo "=============================================="
 }
 

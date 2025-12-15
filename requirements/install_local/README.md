@@ -130,7 +130,7 @@ bash requirements/docker_test.sh --mode docker
    - 宿主机的 `CACHE_DIR` 挂载到容器内的 `CONTAINER_CACHE_DIR`（默认 `/cache/repos`）
    - 容器内通过 `external_repo` 环境变量访问缓存
 5. 容器内执行安装：`requirements/install_local_wrap.sh`
-   - 清理 uv 缓存和虚拟环境
+   - 清理缓存和虚拟环境
    - Prepare 阶段：安装 Python 3.11 和系统依赖
    - Embodied 安装：安装模型和环境
    - 验证安装结果

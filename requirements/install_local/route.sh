@@ -38,7 +38,7 @@ get_local_git_path() {
 install_local_wheel_if_exists() {
     local wheel_url="$1"
     local local_wheel=$(get_local_wheel_path "$wheel_url")
-    uv pip install "$local_wheel"
+    pip install "$local_wheel"
 }
 
 # Function to clone or copy from local

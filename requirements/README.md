@@ -1,12 +1,8 @@
 ## Dependency Installation Guide
 
-We recommend using [`uv`](https://docs.astral.sh/uv/) to install the necessary Python dependencies.
-You can install `uv` via `pip`.
-```shell
-pip install --upgrade uv
-```
+We recommend using `pip` to install the necessary Python dependencies.
 
-After installing `uv`, you can install the dependencies for the target experiments using the `install.sh` script under the `requirements/` folder.
+After installing system dependencies, you can install the dependencies for the target experiments using the `install.sh` script under the `requirements/` folder.
 The script is organized by **targets** and **models**:
 
 - `embodied` target (embodied agents) with models:

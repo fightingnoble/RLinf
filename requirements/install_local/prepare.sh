@@ -65,24 +65,12 @@ setup_build_env() {
     export PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.bfsu.edu.cn/pypi/web/simple}"
     
     # Upgrade core tools
-    echo "Upgrading pip, setuptools, wheel, uv..."
-    python3 -m pip install --upgrade pip setuptools wheel uv
+    echo "Upgrading pip, setuptools, wheel..."
+    python3 -m pip install --upgrade pip setuptools wheel
     
     # Environment Variables from Dockerfile
     export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
     mkdir -p "$HF_HOME"
-    
-    # UV Settings
-    # Can be overridden by config.local.sh
-    export UV_DEFAULT_INDEX="${UV_DEFAULT_INDEX:-https://mirrors.bfsu.edu.cn/pypi/web/simple}"
-    # Use 'copy' mode in Docker to avoid symlink issues with sudo
-    export UV_LINK_MODE="${UV_LINK_MODE:-copy}"
-    
-    # UV Python Management Settings
-    # Prevent uv from downloading managed Python versions from GitHub
-    export UV_PYTHON_DOWNLOADS="${UV_PYTHON_DOWNLOADS:-never}"
-    # Prefer system/conda python over managed ones
-    export UV_PYTHON_PREFERENCE="${UV_PYTHON_PREFERENCE:-system}"
     
     # ManiSkill Settings
     # Skip download prompts (auto-confirm downloads)
@@ -96,10 +84,6 @@ setup_build_env() {
     echo "Environment variables exported:"
     echo "  PIP_INDEX_URL=$PIP_INDEX_URL"
     echo "  HF_HOME=$HF_HOME"
-    echo "  UV_DEFAULT_INDEX=$UV_DEFAULT_INDEX"
-    echo "  UV_LINK_MODE=$UV_LINK_MODE"
-    echo "  UV_PYTHON_DOWNLOADS=$UV_PYTHON_DOWNLOADS"
-    echo "  UV_PYTHON_PREFERENCE=$UV_PYTHON_PREFERENCE"
     echo "  MS_SKIP_ASSET_DOWNLOAD_PROMPT=$MS_SKIP_ASSET_DOWNLOAD_PROMPT"
     echo "  MS_ASSET_DIR=$MS_ASSET_DIR"
 }

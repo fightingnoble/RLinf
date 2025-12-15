@@ -205,7 +205,7 @@ EOF
     local cxx_abi="cxx11abiFALSE"
 
     local wheel_name="flash_attn-${flash_ver}+${cu_tag}${torch_tag}${cxx_abi}-${py_tag}-${abi_tag}-${platform_tag}.whl"
-    uv pip uninstall flash-attn || true
+    pip uninstall -y flash-attn || true
     install_local_wheel_if_exists "${base_url}/${wheel_name}"
 }
 
@@ -228,17 +228,17 @@ EOF
     local platform_tag="linux_x86_64"
     local wheel_name="apex-0.1-${py_tag}-${abi_tag}-${platform_tag}.whl"
         
-    uv pip uninstall apex || true
+    pip uninstall -y apex || true
     # Try local first, if not found (function handles it), then install from URL.
     # If install fails (e.g. 404), echo error.
     local local_wheel=$(get_local_wheel_path "${base_url}/${wheel_name}")
-    uv pip install "${local_wheel}" || (echo "Apex wheel is not available for Python ${py_major}.${py_minor}, please install apex manually. See https://github.com/NVIDIA/apex" >&2; exit 1)
+    pip install "${local_wheel}" || (echo "Apex wheel is not available for Python ${py_major}.${py_minor}, please install apex manually. See https://github.com/NVIDIA/apex" >&2; exit 1)
 }
 
 #=======================EMBODIED INSTALLERS=======================
 
 install_common_embodied_deps() {
-    uv sync --extra embodied --active
+    pip install -e .[embodied]
     bash $SCRIPT_DIR/embodied/sys_deps.sh
     
     add_env_var "NVIDIA_DRIVER_CAPABILITIES" "all"
@@ -260,9 +260,9 @@ install_openvla_model() {
             exit 1
             ;;
     esac
-    UV_TORCH_BACKEND=auto uv pip install -r $SCRIPT_DIR/embodied/models/openvla.txt --no-build-isolation
+    UV_TORCH_BACKEND=auto pip install -r $SCRIPT_DIR/embodied/models/openvla.txt --no-build-isolation
     install_prebuilt_flash_attn
-    uv pip uninstall pynvml || true
+    pip uninstall -y pynvml || true
 }
 
 install_openvla_oft_model() {
@@ -273,7 +273,7 @@ install_openvla_oft_model() {
             PYTHON_VERSION="3.10"
             create_and_sync_venv
             install_common_embodied_deps
-            UV_TORCH_BACKEND=auto uv pip install -r $SCRIPT_DIR/embodied/models/openvla_oft.txt --no-build-isolation
+            UV_TORCH_BACKEND=auto pip install -r $SCRIPT_DIR/embodied/models/openvla_oft.txt --no-build-isolation
             install_behavior_env
             ;;
         maniskill_libero)
@@ -281,14 +281,14 @@ install_openvla_oft_model() {
             install_common_embodied_deps
             install_maniskill_libero_env
             install_prebuilt_flash_attn
-            UV_TORCH_BACKEND=auto uv pip install -r $SCRIPT_DIR/embodied/models/openvla_oft.txt --no-build-isolation
+            UV_TORCH_BACKEND=auto pip install -r $SCRIPT_DIR/embodied/models/openvla_oft.txt --no-build-isolation
             ;;
         *)
             echo "Environment '$ENV_NAME' is not supported for OpenVLA-OFT model." >&2
             exit 1
             ;;
     esac
-    uv pip uninstall pynvml || true
+    pip uninstall -y pynvml || true
 }
 
 install_openpi_model() {
@@ -299,13 +299,13 @@ install_openpi_model() {
             create_and_sync_venv
             install_common_embodied_deps
             install_maniskill_libero_env
-            UV_TORCH_BACKEND=auto GIT_LFS_SKIP_SMUDGE=1 uv pip install -r $SCRIPT_DIR/embodied/models/openpi.txt
+            UV_TORCH_BACKEND=auto GIT_LFS_SKIP_SMUDGE=1 pip install -r $SCRIPT_DIR/embodied/models/openpi.txt
             install_prebuilt_flash_attn
             ;;
         metaworld)
             create_and_sync_venv
             install_common_embodied_deps
-            UV_TORCH_BACKEND=auto GIT_LFS_SKIP_SMUDGE=1 uv pip install -r $SCRIPT_DIR/embodied/models/openpi.txt
+            UV_TORCH_BACKEND=auto GIT_LFS_SKIP_SMUDGE=1 pip install -r $SCRIPT_DIR/embodied/models/openpi.txt
             install_prebuilt_flash_attn
             install_metaworld_env
             ;;
@@ -326,7 +326,7 @@ EOF
         "$VENV_DIR/lib/python${py_major_minor}/site-packages/transformers/"
     
     deploy_openpi_assets "$VENV_DIR"
-    uv pip uninstall pynvml || true
+    pip uninstall -y pynvml || true
 }
 
 #=======================ENV INSTALLERS=======================
@@ -346,9 +346,9 @@ install_maniskill_libero_env() {
         clone_or_copy_repo "https://github.com/RLinf/LIBERO.git" "$libero_dir"
     fi
 
-    uv pip install -e "$libero_dir"
+    pip install -e "$libero_dir"
     add_env_var "PYTHONPATH" "$(realpath "$libero_dir"):\$PYTHONPATH"
-    UV_TORCH_BACKEND=auto uv pip install -r $SCRIPT_DIR/embodied/envs/maniskill.txt
+    UV_TORCH_BACKEND=auto pip install -r $SCRIPT_DIR/embodied/envs/maniskill.txt
 
     # Deploy ManiSkill assets (smart: uses local cache if available)
     deploy_maniskill_assets "$VENV_DIR"
@@ -370,25 +370,25 @@ install_behavior_env() {
     fi
 
     pushd "$behavior_dir" >/dev/null
-    UV_LINK_MODE=hardlink ./setup.sh --omnigibson --bddl --joylo --confirm-no-conda --accept-nvidia-eula --use-uv
+    ./setup.sh --omnigibson --bddl --joylo --confirm-no-conda --accept-nvidia-eula
     popd >/dev/null
-    uv pip uninstall flash-attn || true
-    uv pip install ml_dtypes==0.5.3 protobuf==3.20.3
-    uv pip install click==8.2.1
+    pip uninstall -y flash-attn || true
+    pip install ml_dtypes==0.5.3 protobuf==3.20.3
+    pip install click==8.2.1
     pushd ~ >/dev/null
-    uv pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1
+    pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1
     install_prebuilt_flash_attn
     popd >/dev/null
 }
 
 install_metaworld_env() {
-    uv pip install -r $SCRIPT_DIR/embodied/envs/metaworld.txt
+    pip install -r $SCRIPT_DIR/embodied/envs/metaworld.txt
 }
 
 #=======================REASONING INSTALLER=======================
 
 install_reason() {
-    uv sync --extra sglang-vllm --active
+    pip install -e .[sglang-vllm]
 
     # Megatron-LM
     # Prefer an existing checkout if MEGATRON_PATH is provided; otherwise clone into the venv.
@@ -409,12 +409,12 @@ install_reason() {
 
     # If TEST_BUILD is 1, skip installing megatron.txt
     if [ "$TEST_BUILD" -ne 1 ]; then
-        UV_TORCH_BACKEND=auto APEX_CPP_EXT=1 APEX_CUDA_EXT=1 NVCC_APPEND_FLAGS="--threads 24" APEX_PARALLEL_BUILD=24 uv pip install -r $SCRIPT_DIR/reason/megatron.txt --no-build-isolation
+        UV_TORCH_BACKEND=auto APEX_CPP_EXT=1 APEX_CUDA_EXT=1 NVCC_APPEND_FLAGS="--threads 24" APEX_PARALLEL_BUILD=24 pip install -r $SCRIPT_DIR/reason/megatron.txt --no-build-isolation
     fi
 
     install_prebuilt_apex
     install_prebuilt_flash_attn
-    uv pip uninstall pynvml || true
+    pip uninstall -y pynvml || true
 }
 
 main() {
