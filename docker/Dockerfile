@@ -9,7 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN if [ -z "$NO_MIRROR" ]; then sed -i 's@//.*archive.ubuntu.com@//mirrors.ustc.edu.cn@g' /etc/apt/sources.list; fi
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git vim libibverbs-dev openssh-server sudo runit runit-systemd tmux \
-    build-essential python3-dev cmake pkg-config iproute2 pciutils python3 python3-pip \
+    build-essential python3-dev python3-venv cmake pkg-config iproute2 pciutils python3 python3-pip \
     wget unzip curl
 
 RUN pip config set global.index-url https://mirrors.ustc.edu.cn/pypi/simple
