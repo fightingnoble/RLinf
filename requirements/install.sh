@@ -1,6 +1,6 @@
 #! /bin/bash
 
-set -euo pipefail
+set -euox pipefail
 
 TARGET=""
 
@@ -134,22 +134,6 @@ create_and_sync_venv() {
         VENV_DIR=$("$PYTHON_CMD" -c "import sys; print(sys.prefix)")
         echo "Using current environment at: $VENV_DIR"
     else
-        # Warn if conda is active when creating a new venv
-        if [ -n "${CONDA_PREFIX:-}" ]; then
-            echo "==========================================" >&2
-            echo "Warning: Conda environment is active!" >&2
-            echo "  Conda environment: $CONDA_PREFIX" >&2
-            echo "" >&2
-            echo "This may cause conflicts when creating a new venv." >&2
-            echo "Recommended options:" >&2
-            echo "  1. Run 'conda deactivate' before this script" >&2
-            echo "  2. Use --no-venv to install directly into the conda environment" >&2
-            echo "  3. Use --python to explicitly specify Python path" >&2
-            echo "" >&2
-            echo "Continuing with venv creation..." >&2
-            echo "==========================================" >&2
-        fi
-
         if [ ! -d "$VENV_DIR" ]; then
             echo "Creating virtual environment at $VENV_DIR with $PYTHON_CMD"
             "$PYTHON_CMD" -m venv "$VENV_DIR"
@@ -162,6 +146,10 @@ create_and_sync_venv() {
     echo "Active Python: $(which python)"
     echo "Active pip: $(which pip)"
     python --version
+    
+    # Upgrade pip, setuptools, wheel in the virtual environment
+    echo "Upgrading pip, setuptools, wheel in virtual environment..."
+    python -m pip install --upgrade pip setuptools wheel
     
     # uv venv "$VENV_DIR" --python "$PYTHON_VERSION"
     # # shellcheck disable=SC1090
