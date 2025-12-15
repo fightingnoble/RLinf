@@ -75,7 +75,8 @@ setup_build_env() {
     # UV Settings
     # Can be overridden by config.local.sh
     export UV_DEFAULT_INDEX="${UV_DEFAULT_INDEX:-https://mirrors.bfsu.edu.cn/pypi/web/simple}"
-    export UV_LINK_MODE="${UV_LINK_MODE:-symlink}"
+    # Use 'copy' mode in Docker to avoid symlink issues with sudo
+    export UV_LINK_MODE="${UV_LINK_MODE:-copy}"
     
     # UV Python Management Settings
     # Prevent uv from downloading managed Python versions from GitHub

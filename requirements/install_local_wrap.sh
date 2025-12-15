@@ -11,7 +11,7 @@ uv cache clean || true
 rm -rf .venv uv.lock pyproject.toml.backup requirements/*.backup
 
 echo "[Wrap] 运行 prepare 阶段（安装 Python 3.11）..."
-sudo --preserve-env=external_repo bash requirements/install.sh prepare --python /usr/bin/python3.11
+bash requirements/install.sh prepare --python /usr/bin/python3.11
 echo ""
 
 echo "[Wrap] 运行 embodied 安装..."
@@ -22,7 +22,7 @@ echo 'Environment:'
 echo "  external_repo: $external_repo"
 echo '  Python: /usr/bin/python3.11'
 echo ''
-sudo --preserve-env=external_repo bash requirements/install.sh embodied --model openvla --env maniskill_libero --python /usr/bin/python3.11 2>&1 | tee /tmp/install_full.log
+bash requirements/install.sh embodied --model openvla --env maniskill_libero --python /usr/bin/python3.11 2>&1 | tee /tmp/install_full.log
 echo ""
 
 echo "[Wrap] 验证安装结果..."
