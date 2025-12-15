@@ -130,33 +130,8 @@ create_and_sync_venv() {
     # Ensure build environment is set up (env vars, pip installed)
     setup_build_env
 
-    # Determine Python command based on PYTHON_VERSION
-    local python_cmd
-    if [[ "$PYTHON_VERSION" == *"/"* ]]; then
-        # PYTHON_VERSION is a path
-        python_cmd="$PYTHON_VERSION"
-    else
-        # PYTHON_VERSION is a version number, extract major.minor (e.g., 3.11 from 3.11.14)
-        local py_major_minor
-        py_major_minor=$(echo "$PYTHON_VERSION" | grep -oE '^[0-9]+\.[0-9]+')
-        python_cmd="python${py_major_minor}"
-    fi
-    
-    echo "Using Python: $python_cmd (version: $PYTHON_VERSION)"
-    
-    # Verify Python command exists
-    if ! command -v "$python_cmd" &> /dev/null; then
-        echo "Error: Python command '$python_cmd' not found" >&2
-        echo "Available Python versions:" >&2
-        ls -1 /usr/bin/python* 2>/dev/null || echo "  None found in /usr/bin" >&2
-        exit 1
-    fi
-    
-    # Display actual Python version
-    echo "Python version check: $("$python_cmd" --version 2>&1)"
-
     if [ "$USE_CURRENT_ENV" -eq 1 ]; then
-        VENV_DIR=$("$python_cmd" -c "import sys; print(sys.prefix)")
+        VENV_DIR=$("$PYTHON_CMD" -c "import sys; print(sys.prefix)")
         echo "Using current environment at: $VENV_DIR"
     else
         # Warn if conda is active when creating a new venv
@@ -174,10 +149,10 @@ create_and_sync_venv() {
             echo "Continuing with venv creation..." >&2
             echo "==========================================" >&2
         fi
-        
+
         if [ ! -d "$VENV_DIR" ]; then
-            echo "Creating virtual environment at $VENV_DIR with $python_cmd"
-            "$python_cmd" -m venv "$VENV_DIR"
+            echo "Creating virtual environment at $VENV_DIR with $PYTHON_CMD"
+            "$PYTHON_CMD" -m venv "$VENV_DIR"
         fi
         # shellcheck disable=SC1090
         source "$VENV_DIR/bin/activate"
@@ -187,7 +162,13 @@ create_and_sync_venv() {
     echo "Active Python: $(which python)"
     echo "Active pip: $(which pip)"
     python --version
-    pip install -e .
+    
+    # uv venv "$VENV_DIR" --python "$PYTHON_VERSION"
+    # # shellcheck disable=SC1090
+    # source "$VENV_DIR/bin/activate"
+    # UV_TORCH_BACKEND=auto uv sync --active
+
+
 }
 
 install_prebuilt_flash_attn() {

@@ -45,7 +45,7 @@ install_system_deps() {
 # Setup Python tools and Environment Variables
 setup_build_env() {
     echo "=== Setting up Build Environment ==="
-    
+
     # Load local configuration if exists (config.local.sh is in requirements/ directory)
     # SCRIPT_DIR is defined in install.sh as requirements/
     if [ -n "${SCRIPT_DIR:-}" ]; then
@@ -60,14 +60,46 @@ setup_build_env() {
     if [ -z "${external_repo:-}" ] && [ -n "${CACHE_DIR:-}" ]; then
         export external_repo="$CACHE_DIR"
     fi
-    
+
+    # Determine Python command based on PYTHON_VERSION (set by install.sh)
+    if [ -n "${PYTHON_VERSION:-}" ]; then
+        if [[ "$PYTHON_VERSION" == *"/"* ]]; then
+            # PYTHON_VERSION is a path
+            PYTHON_CMD="$PYTHON_VERSION"
+        else
+            # PYTHON_VERSION is a version number, extract major.minor (e.g., 3.11 from 3.11.14)
+            local py_major_minor
+            py_major_minor=$(echo "$PYTHON_VERSION" | grep -oE '^[0-9]+\.[0-9]+')
+            PYTHON_CMD="python${py_major_minor}"
+        fi
+
+        echo "Using Python: $PYTHON_CMD (version: $PYTHON_VERSION)"
+
+        # Verify Python command exists
+        if ! command -v "$PYTHON_CMD" &> /dev/null; then
+            echo "Error: Python command '$PYTHON_CMD' not found" >&2
+            echo "Available Python versions:" >&2
+            ls -1 /usr/bin/python* 2>/dev/null || echo "  None found in /usr/bin" >&2
+            exit 1
+        fi
+
+        # Display actual Python version
+        echo "Python version check: $("$PYTHON_CMD" --version 2>&1)"
+        export PYTHON_CMD  # Export for use in other functions
+    else
+        # Fallback to python3 if PYTHON_VERSION not set
+        PYTHON_CMD="python3"
+        echo "PYTHON_VERSION not set, using default python3"
+        export PYTHON_CMD
+    fi
+
     # Pip Mirror (Session level)
     # Can be overridden by config.local.sh
-    export PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.bfsu.edu.cn/pypi/web/simple}"
-    
-    # Upgrade core tools
+    export PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.bfsu.edu.cn/pypi/web.simple}"
+
+    # Upgrade core tools using the selected Python
     echo "Upgrading pip, setuptools, wheel, uv..."
-    python3 -m pip install --upgrade pip setuptools wheel uv
+    "$PYTHON_CMD" -m pip install --upgrade pip setuptools wheel uv
     
     # Environment Variables from Dockerfile
     export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
