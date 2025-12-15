@@ -27,6 +27,7 @@ install_system_deps() {
     $sudo_cmd apt-get install -y --no-install-recommends \
         git vim libibverbs-dev openssh-server sudo runit runit-systemd tmux \
         build-essential python3-dev cmake pkg-config iproute2 pciutils python3 python3-pip \
+        python3-venv \
         wget unzip curl
     
     # Install Python 3.11 for embodied targets
@@ -65,50 +66,9 @@ setup_build_env() {
     export PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.bfsu.edu.cn/pypi/web/simple}"
     
     # Upgrade core tools
-    echo "Upgrading pip, setuptools, wheel..."
-    python3 -m pip install --upgrade pip setuptools wheel
-
-    # Ensure python3-venv is available for virtual environment creation
-    if ! python3 -c "import venv" 2>/dev/null; then
-        echo "python3-venv not available, attempting to install..."
-        if command -v apt-get &> /dev/null; then
-            local sudo_cmd=""
-            if [ "$EUID" -ne 0 ]; then
-                sudo_cmd="sudo"
-            fi
-
-            # Detect Python version and install appropriate venv package
-            local python_version
-            python_version=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "3")
-
-            echo "Detected Python version: $python_version"
-            echo "Installing python${python_version}-venv via apt-get..."
-
-            $sudo_cmd apt-get update
-            if $sudo_cmd apt-get install -y --no-install-recommends "python${python_version}-venv"; then
-                echo "Successfully installed python${python_version}-venv"
-            else
-                echo "Failed to install python${python_version}-venv, trying generic python3-venv..."
-                if $sudo_cmd apt-get install -y --no-install-recommends python3-venv; then
-                    echo "Successfully installed python3-venv as fallback"
-                else
-                    echo "Failed to install any venv package"
-                fi
-            fi
-        else
-            # Detect Python version for manual installation instructions
-            local python_version
-            python_version=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "3")
-
-            echo "Warning: Could not automatically install python${python_version}-venv. Please install it manually:"
-            echo "  Ubuntu/Debian: sudo apt-get install python${python_version}-venv"
-            echo "  Alternative: sudo apt-get install python3-venv"
-            echo "  CentOS/RHEL: sudo yum install python${python_version}-venv (or python3-virtualenv)"
-            echo "  Other systems: Please install python${python_version}-venv or python-virtualenv package"
-            echo "Continuing without venv capability..."
-        fi
-    fi
-
+    echo "Upgrading pip, setuptools, wheel, uv..."
+    python3 -m pip install --upgrade pip setuptools wheel uv
+    
     # Environment Variables from Dockerfile
     export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
     mkdir -p "$HF_HOME"
