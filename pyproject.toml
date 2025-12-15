@@ -99,14 +99,7 @@ where = ["."]
 include = ['rlinf', 'toolkits', 'ray_utils']
 
 [tool.setuptools]
-override-dependencies = [
-    "torch==2.6.0",
-    "torchvision==0.21.0",
-    "torchaudio==2.6.0",
-    "xgrammar==0.1.19",
-    "uvloop==0.21.0",
-    "tensorflow-addons==0.23.0",
-]
+include-package-data = true
 
 [tool.ruff]
 line-length = 88
