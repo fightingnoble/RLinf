@@ -95,7 +95,7 @@ setup_build_env() {
 
     # Pip Mirror (Session level)
     # Can be overridden by config.local.sh
-    export PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.bfsu.edu.cn/pypi/web.simple}"
+    export PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.bfsu.edu.cn/pypi/web/simple}"
 
     # Upgrade core tools using the selected Python
     echo "Upgrading pip, setuptools, wheel..."
