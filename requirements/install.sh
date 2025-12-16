@@ -254,6 +254,9 @@ install_openvla_model() {
             ;;
         maniskill_libero)
             create_and_sync_venv
+            # Note: OpenVLA requires torch==2.2.0, but RLinf requires torch==2.6.0
+            # We install RLinf first, then openvla will downgrade torch to 2.2.0
+            # This is expected behavior - RLinf code should handle torch 2.2.0 gracefully
             install_common_embodied_deps
             install_maniskill_libero_env
             ;;
@@ -262,6 +265,10 @@ install_openvla_model() {
             exit 1
             ;;
     esac
+    # Install openvla - this will downgrade torch from 2.6.0 to 2.2.0 as required by openvla
+    # Note: This is expected behavior. OpenVLA requires torch==2.2.0, which conflicts with
+    # RLinf's torch==2.6.0 requirement. The version conflict warning can be ignored.
+    # RLinf code has fallback mechanisms to handle torch 2.2.0 (e.g., DTensor import fallback).
     UV_TORCH_BACKEND=auto pip install -r $SCRIPT_DIR/embodied/models/openvla.txt --no-build-isolation
     install_prebuilt_flash_attn
     pip uninstall -y pynvml || true
