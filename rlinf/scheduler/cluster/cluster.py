@@ -94,6 +94,37 @@ class Cluster:
         """Check if the cluster has been initialized."""
         return hasattr(cls, "_instance") and cls._instance is not None
 
+    @staticmethod
+    def _handle_ray_init_error(e: RuntimeError, logger: Optional[logging.Logger] = None):
+        """Handle RuntimeError from ray.init(), especially version mismatch errors.
+        
+        Args:
+            e: The RuntimeError exception raised by ray.init()
+            logger: Optional logger to log the error message. If None, uses default logger.
+        """
+        error_msg = str(e)
+        if "Version mismatch" in error_msg or "version mismatch" in error_msg.lower():
+            log_msg = (
+                f"Ray version mismatch detected: {error_msg}\n"
+                "Please ensure all nodes in the cluster are using the same Ray and Python versions.\n"
+                "You can either:\n"
+                "1. Restart the Ray cluster with matching versions\n"
+                "2. Upgrade/downgrade your local Ray installation to match the cluster version"
+            )
+            if logger:
+                logger.error(log_msg)
+            else:
+                # Use default logger if none provided
+                default_logger = logging.getLogger(Cluster.SYS_NAME)
+                default_logger.error(log_msg)
+            raise RuntimeError(
+                f"Ray version mismatch: {error_msg}\n"
+                "Please ensure all nodes in the cluster are using the same Ray and Python versions."
+            ) from e
+        else:
+            # Re-raise if it's a different RuntimeError
+            raise
+
     def __new__(cls, *args, **kwargs):  # noqa D417
         """Create a singleton class that manages the cluster resources for Ray workers."""
         if not hasattr(cls, "_instance"):
@@ -191,10 +222,15 @@ class Cluster:
                 namespace=Cluster.NAMESPACE,
             )
         except ConnectionError:
-            ray.init(
-                logging_level=Cluster.LOGGING_LEVEL,
-                namespace=Cluster.NAMESPACE,
-            )
+            try:
+                ray.init(
+                    logging_level=Cluster.LOGGING_LEVEL,
+                    namespace=Cluster.NAMESPACE,
+                )
+            except RuntimeError as e:
+                Cluster._handle_ray_init_error(e, self._logger)
+        except RuntimeError as e:
+            Cluster._handle_ray_init_error(e, self._logger)
 
         # Wait for the cluster to be ready
         while len(Cluster.get_alive_nodes()) < self._num_nodes:
@@ -278,11 +314,14 @@ class Cluster:
 
     def _init_from_existing_managers(self):
         if not ray.is_initialized():
-            ray.init(
-                address="auto",
-                namespace=Cluster.NAMESPACE,
-                logging_level=Cluster.LOGGING_LEVEL,
-            )
+            try:
+                ray.init(
+                    address="auto",
+                    namespace=Cluster.NAMESPACE,
+                    logging_level=Cluster.LOGGING_LEVEL,
+                )
+            except RuntimeError as e:
+                Cluster._handle_ray_init_error(e, self._logger)
 
         from ..manager.node_manager import NodeManager
 

@@ -32,11 +32,14 @@ class ManagerProxy:
         from ..worker import Worker
 
         if not ray.is_initialized():
-            ray.init(
-                address="auto",
-                namespace=Cluster.NAMESPACE,
-                logging_level=Cluster.LOGGING_LEVEL,
-            )
+            try:
+                ray.init(
+                    address="auto",
+                    namespace=Cluster.NAMESPACE,
+                    logging_level=Cluster.LOGGING_LEVEL,
+                )
+            except RuntimeError as e:
+                Cluster._handle_ray_init_error(e)
 
         count = 0
         while True:
