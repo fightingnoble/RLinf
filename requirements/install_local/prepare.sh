@@ -93,9 +93,40 @@ setup_build_env() {
         export PYTHON_CMD
     fi
 
+    # CUDA variant configuration for PyTorch installation
+    # Supported values: cuda124 (default), cuda121
+    # Note: CUDA 12.1 uses PyTorch cu118 (no cu121 available)
+    export CUDA_VARIANT="${CUDA_VARIANT:-cuda124}"
+    
+    # Determine PyTorch CUDA index based on CUDA variant
+    case "$CUDA_VARIANT" in
+        cuda124)
+            TORCH_CUDA_TAG="cu124"
+            PYTORCH_INDEX_URL="https://download.pytorch.org/whl/cu124"
+            ;;
+        cuda121)
+            # PyTorch doesn't have cu121, use cu118 for CUDA 12.1 compatibility
+            TORCH_CUDA_TAG="cu118"
+            PYTORCH_INDEX_URL="https://download.pytorch.org/whl/cu118"
+            ;;
+        *)
+            echo "Warning: Unknown CUDA_VARIANT '$CUDA_VARIANT', defaulting to cuda124"
+            TORCH_CUDA_TAG="cu124"
+            PYTORCH_INDEX_URL="https://download.pytorch.org/whl/cu124"
+            ;;
+    esac
+    
+    export TORCH_CUDA_TAG
+    export PYTORCH_INDEX_URL
+    echo "CUDA variant: $CUDA_VARIANT (PyTorch tag: $TORCH_CUDA_TAG)"
+    
     # Pip Mirror (Session level)
     # Can be overridden by config.local.sh
     export PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.bfsu.edu.cn/pypi/web/simple}"
+    
+    # UV configuration for PyTorch installation
+    export UV_EXTRA_INDEX_URL="$PYTORCH_INDEX_URL"
+    export UV_INDEX_STRATEGY="unsafe-best-match"
 
     # Upgrade core tools using the selected Python
     echo "Upgrading pip, setuptools, wheel, uv..."

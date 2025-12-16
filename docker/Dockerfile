@@ -1,15 +1,24 @@
 ARG BUILD_TARGET=reason
+ARG CUDA_VARIANT=cuda124
 
-FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04 AS base-image
+# Select base image based on CUDA variant
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04 AS base-image-cuda124
+FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04 AS base-image-cuda121
+
+# Use selected base image
+FROM base-image-${CUDA_VARIANT} AS base-image
 
 ARG NO_MIRROR
+ARG CUDA_VARIANT
 SHELL ["/bin/bash", "-c"]
 ENV PATH=/opt/conda/bin:$PATH
 ENV DEBIAN_FRONTEND=noninteractive
+ENV CUDA_VARIANT=${CUDA_VARIANT}
 RUN if [ -z "$NO_MIRROR" ]; then sed -i 's@//.*archive.ubuntu.com@//mirrors.ustc.edu.cn@g' /etc/apt/sources.list; fi
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git vim libibverbs-dev openssh-server sudo runit runit-systemd tmux \
     build-essential python3-dev cmake pkg-config iproute2 pciutils python3 python3-pip \
+    python3-venv \
     wget unzip curl
 
 RUN pip config set global.index-url https://mirrors.ustc.edu.cn/pypi/simple
