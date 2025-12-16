@@ -58,12 +58,10 @@ RUN if [ "$CUDA_VARIANT" = "cuda121" ]; then \
 # Set zsh as default shell
 RUN chsh -s /bin/zsh
 
-# Set proxy for downloads
+# Set proxy configuration (for temporary use during build, not as default)
 ENV PROXY_HOST=${PROXY_HOST}
 ENV PROXY_PORT=${PROXY_PORT}
 ENV PROXY_URL=http://${PROXY_HOST}:${PROXY_PORT}
-ENV http_proxy=${PROXY_URL}
-ENV https_proxy=${PROXY_URL}
 
 # Create host-matching user with passwordless sudo for occasional privileged commands
 RUN groupadd -g ${HOST_GID} appuser && \
@@ -74,24 +72,28 @@ RUN groupadd -g ${HOST_GID} appuser && \
     (getent group docker >/dev/null || groupadd -r docker) && \
     usermod -aG docker,sudo appuser
 
-# Configure git proxy and safe directory for root
-RUN git config --global http.proxy ${PROXY_URL} && \
-    git config --global https.proxy ${PROXY_URL} && \
-    git config --global --add safe.directory '*'
+# Configure git safe directory for root
+RUN git config --global --add safe.directory '*'
 
-# Install oh-my-zsh for root user (with proxy)
-RUN sh -c "$(curl -fsSL https://install.ohmyz.sh/)" "" --unattended || true
+# Install oh-my-zsh for root user (with temporary proxy)
+RUN http_proxy=${PROXY_URL} https_proxy=${PROXY_URL} \
+    sh -c "$(curl -fsSL https://install.ohmyz.sh/)" "" --unattended || true
 
 # Generate SSH key for root (non-interactive)
 RUN mkdir -p ~/.ssh && \
     ssh-keygen -t ed25519 -C "${SSH_KEY_EMAIL}" -f ~/.ssh/id_ed25519 -N ""
 
-# Clone zsh plugins using HTTPS (with proxy) for root
-RUN ZSH=~/.oh-my-zsh && \
+# Clone zsh plugins using HTTPS (with temporary proxy) for root
+RUN http_proxy=${PROXY_URL} https_proxy=${PROXY_URL} \
+    git config --global http.proxy ${PROXY_URL} && \
+    git config --global https.proxy ${PROXY_URL} && \
+    ZSH=~/.oh-my-zsh && \
     mkdir -p $ZSH/custom/plugins && \
     git clone https://github.com/zsh-users/zsh-completions $ZSH/custom/plugins/zsh-completions && \
     git clone https://github.com/zsh-users/zsh-syntax-highlighting $ZSH/custom/plugins/zsh-syntax-highlighting && \
-    git clone https://github.com/zsh-users/zsh-autosuggestions $ZSH/custom/plugins/zsh-autosuggestions
+    git clone https://github.com/zsh-users/zsh-autosuggestions $ZSH/custom/plugins/zsh-autosuggestions && \
+    git config --global --unset http.proxy && \
+    git config --global --unset https.proxy
 
 # Configure zsh plugins and proxy alias for root
 RUN sed -i 's/plugins=(git)/plugins=(git zsh-completions zsh-syntax-highlighting zsh-autosuggestions z extract web-search)/' ~/.zshrc && \
