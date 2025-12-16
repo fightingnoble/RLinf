@@ -1,11 +1,21 @@
-FROM docker.1ms.run/nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
+# CUDA variant configuration
+# Supported values: cuda124 (default), cuda121
+ARG CUDA_VARIANT=cuda124
+
+# Select base image based on CUDA variant
+FROM docker.1ms.run/nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04 AS base-image-cuda124
+FROM docker.1ms.run/nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04 AS base-image-cuda121
+
+# Use selected base image
+FROM base-image-${CUDA_VARIANT} AS base-image
 
 # Configurable arguments
-# Usage: docker build --build-arg PROXY_HOST=your.proxy.com --build-arg PROXY_PORT=1080 --build-arg SSH_KEY_EMAIL=your@email.com
+# Usage: docker build --build-arg PROXY_HOST=your.proxy.com --build-arg PROXY_PORT=1080 --build-arg SSH_KEY_EMAIL=your@email.com --build-arg CUDA_VARIANT=cuda124
 ARG PROXY_HOST=222.29.97.81
 ARG PROXY_PORT=1080
 ARG SSH_KEY_EMAIL=zhangchg@stu.pku.edu.cn
 ARG NO_MIRROR
+ARG CUDA_VARIANT
 # Keep UID/GID in sync with host to avoid root-owned artifacts on mounts
 ARG HOST_UID=1000
 ARG HOST_GID=1000
@@ -13,6 +23,7 @@ ARG HOST_GID=1000
 SHELL ["/bin/bash", "-c"]
 ENV PATH=/opt/conda/bin:$PATH
 ENV DEBIAN_FRONTEND=noninteractive
+ENV CUDA_VARIANT=${CUDA_VARIANT}
 
 # Configure apt mirror if needed
 RUN if [ -z "$NO_MIRROR" ]; then sed -i 's@//.*archive.ubuntu.com@//mirrors.ustc.edu.cn@g' /etc/apt/sources.list; fi
@@ -21,6 +32,7 @@ RUN if [ -z "$NO_MIRROR" ]; then sed -i 's@//.*archive.ubuntu.com@//mirrors.ustc
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git vim libibverbs-dev openssh-server sudo runit runit-systemd tmux \
     build-essential python3-dev cmake pkg-config iproute2 pciutils python3 python3-pip \
+    python3-venv \
     wget unzip curl \
     zsh \
     openssh-client \
@@ -29,6 +41,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Configure pip mirror and upgrade
 RUN pip config set global.index-url https://mirrors.bfsu.edu.cn/pypi/web/simple
 RUN python3 -m pip install -i https://mirrors.bfsu.edu.cn/pypi/web/simple --upgrade pip setuptools wheel uv
+
+# Configure PyTorch CUDA index based on CUDA variant
+# CUDA 12.4 -> cu124, CUDA 12.1 -> cu118 (PyTorch has no cu121)
+RUN if [ "$CUDA_VARIANT" = "cuda121" ]; then \
+        TORCH_CUDA_TAG="cu118"; \
+    else \
+        TORCH_CUDA_TAG="cu124"; \
+    fi && \
+    echo "PyTorch CUDA tag: $TORCH_CUDA_TAG (CUDA variant: $CUDA_VARIANT)" && \
+    echo "export UV_EXTRA_INDEX_URL=\"https://download.pytorch.org/whl/$TORCH_CUDA_TAG\"" >> ~/.zshrc && \
+    echo "export UV_INDEX_STRATEGY=\"unsafe-best-match\"" >> ~/.zshrc && \
+    echo "export UV_EXTRA_INDEX_URL=\"https://download.pytorch.org/whl/$TORCH_CUDA_TAG\"" >> /etc/environment && \
+    echo "export UV_INDEX_STRATEGY=\"unsafe-best-match\"" >> /etc/environment
 
 # Set zsh as default shell
 RUN chsh -s /bin/zsh
