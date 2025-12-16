@@ -39,6 +39,7 @@ BUILD_ARGS=(
 [ -n "$PROXY_PORT" ] && BUILD_ARGS+=(--build-arg PROXY_PORT="$PROXY_PORT")
 [ -n "$SSH_KEY_EMAIL" ] && BUILD_ARGS+=(--build-arg SSH_KEY_EMAIL="$SSH_KEY_EMAIL")
 [ -n "$NO_MIRROR" ] && BUILD_ARGS+=(--build-arg NO_MIRROR="$NO_MIRROR")
+[ -n "$CUDA_VARIANT" ] && BUILD_ARGS+=(--build-arg CUDA_VARIANT="$CUDA_VARIANT")
 
 docker build \
   "${BUILD_ARGS[@]}" \

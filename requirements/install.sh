@@ -1,6 +1,6 @@
 #! /bin/bash
 
-set -euox pipefail
+set -euo pipefail
 
 TARGET=""
 
@@ -207,7 +207,7 @@ EOF
     local cxx_abi="cxx11abiFALSE"
 
     local wheel_name="flash_attn-${flash_ver}+${cu_tag}${torch_tag}${cxx_abi}-${py_tag}-${abi_tag}-${platform_tag}.whl"
-    uv pip uninstall -y flash-attn || true
+    uv pip uninstall flash-attn || true
     install_local_wheel_if_exists "${base_url}/${wheel_name}"
 }
 
@@ -230,7 +230,7 @@ EOF
     local platform_tag="linux_x86_64"
     local wheel_name="apex-0.1-${py_tag}-${abi_tag}-${platform_tag}.whl"
         
-    uv pip uninstall -y apex || true
+    uv pip uninstall apex || true
     # Try local first, if not found (function handles it), then install from URL.
     # If install fails (e.g. 404), echo error.
     local local_wheel=$(get_local_wheel_path "${base_url}/${wheel_name}")
@@ -264,7 +264,7 @@ install_openvla_model() {
     esac
     UV_TORCH_BACKEND=auto uv pip install -r $SCRIPT_DIR/embodied/models/openvla.txt --no-build-isolation
     install_prebuilt_flash_attn
-    uv pip uninstall -y pynvml || true
+    uv pip uninstall pynvml || true
 }
 
 install_openvla_oft_model() {
@@ -290,7 +290,7 @@ install_openvla_oft_model() {
             exit 1
             ;;
     esac
-    pip uninstall -y pynvml || true
+    uv pip uninstall pynvml || true
 }
 
 install_openpi_model() {
@@ -328,7 +328,7 @@ EOF
         "$VENV_DIR/lib/python${py_major_minor}/site-packages/transformers/"
     
     deploy_openpi_assets "$VENV_DIR"
-    pip uninstall -y pynvml || true
+    uv pip uninstall pynvml || true
 }
 
 #=======================ENV INSTALLERS=======================
@@ -374,7 +374,7 @@ install_behavior_env() {
     pushd "$behavior_dir" >/dev/null
     ./setup.sh --omnigibson --bddl --joylo --confirm-no-conda --accept-nvidia-eula
     popd >/dev/null
-    uv pip uninstall -y flash-attn || true
+    uv pip uninstall flash-attn || true
     uv pip install ml_dtypes==0.5.3 protobuf==3.20.3
     uv pip install click==8.2.1
     pushd ~ >/dev/null
@@ -416,7 +416,7 @@ install_reason() {
 
     install_prebuilt_apex
     install_prebuilt_flash_attn
-    pip uninstall -y pynvml || true
+    uv pip uninstall pynvml || true
 }
 
 main() {

@@ -15,6 +15,7 @@ classifiers = [
     #   5 - Production/Stable
     "Development Status :: 2 - Pre-Alpha",
     "Environment :: GPU :: NVIDIA CUDA :: 12 :: 12.1",
+    "Environment :: GPU :: NVIDIA CUDA :: 12 :: 12.4",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
@@ -94,14 +95,7 @@ conflicts = [
     ],
 ]
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ['rlinf', 'toolkits', 'ray_utils']
 
-[tool.setuptools]
-include-package-data = true
-
-[tool.uv]
 override-dependencies = [
     "torch==2.6.0",
     "torchvision==0.21.0",
@@ -110,6 +104,13 @@ override-dependencies = [
     "uvloop==0.21.0",
     "tensorflow-addons==0.23.0",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ['rlinf', 'toolkits', 'ray_utils']
+
+[tool.setuptools]
+include-package-data = true
 
 [tool.ruff]
 line-length = 88

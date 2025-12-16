@@ -79,9 +79,11 @@ cd "$REPO_ROOT"
 if [ "$MODE" = "docker" ]; then
   docker run --rm -v "$(pwd):/data" ubuntu:latest chown -R $(id -u):$(id -g) /data
 fi
+
+echo "[Wrap] 清理缓存与虚拟环境..."
+# pip cache purge || true
+rm -rf .venv uv.lock pyproject.toml.backup requirements/*.backup
 ./requirements/install_local/restore.sh
-rm -rf .venv uv.lock pyproject.toml.backup
-find requirements -name "*.backup" -type f -delete
 echo ""
 
 # ============================================================

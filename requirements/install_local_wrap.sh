@@ -6,10 +6,6 @@ set -e
 # - 已处于仓库根目录
 # - external_repo 等环境变量已设置（由调用方负责）
 
-echo "[Wrap] 清理缓存与虚拟环境..."
-pip cache purge || true
-rm -rf .venv pyproject.toml.backup requirements/*.backup
-
 echo "[Wrap] 运行 prepare 阶段（安装 Python 3.11）..."
 bash requirements/install.sh prepare --python /usr/bin/python3.11
 echo ""
