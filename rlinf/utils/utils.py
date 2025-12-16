@@ -24,17 +24,17 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
+from torch.optim import Optimizer
+
+# DTensor import with fallback for different PyTorch versions
 try:
     from torch.distributed.tensor import DTensor
 except ImportError:
     try:
-        # For some PyTorch versions, it might be in _tensor
-        from torch.distributed._tensor import DTensor
+        from torch.distributed._tensor import DTensor  # noqa: F401
     except ImportError:
-        # If DTensor is not available, define a dummy class for isinstance checks
-        class DTensor:
-            pass
-from torch.optim import Optimizer
+        # Fallback: define a dummy DTensor class if not available
+        DTensor = type(None)  # This will make isinstance checks fail gracefully
 
 
 def clear_memory(sync=True):
