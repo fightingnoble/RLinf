@@ -785,11 +785,14 @@ class Worker(metaclass=WorkerMeta):
 
         if not ray.is_initialized():
             # Initialize Ray if not already initialized
-            ray.init(
-                address="auto",
-                namespace=Cluster.NAMESPACE,
-                logging_level=Cluster.LOGGING_LEVEL,
-            )
+            try:
+                ray.init(
+                    address="auto",
+                    namespace=Cluster.NAMESPACE,
+                    logging_level=Cluster.LOGGING_LEVEL,
+                )
+            except RuntimeError as e:
+                Cluster._handle_ray_init_error(e)
 
         if (
             self._manager_proxy is None
