@@ -98,8 +98,8 @@ setup_build_env() {
     export PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.bfsu.edu.cn/pypi/web/simple}"
 
     # Upgrade core tools using the selected Python
-    echo "Upgrading pip, setuptools, wheel..."
-    "$PYTHON_CMD" -m pip install --upgrade pip setuptools wheel
+    echo "Upgrading pip, setuptools, wheel, uv..."
+    "$PYTHON_CMD" -m pip install --upgrade pip setuptools wheel uv
     
     # Environment Variables from Dockerfile
     export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
