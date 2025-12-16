@@ -24,7 +24,16 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
-from torch.distributed.tensor import DTensor
+try:
+    from torch.distributed.tensor import DTensor
+except ImportError:
+    try:
+        # For some PyTorch versions, it might be in _tensor
+        from torch.distributed._tensor import DTensor
+    except ImportError:
+        # If DTensor is not available, define a dummy class for isinstance checks
+        class DTensor:
+            pass
 from torch.optim import Optimizer
 
 
