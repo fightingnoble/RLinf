@@ -147,6 +147,19 @@ create_and_sync_venv() {
     echo "Active pip: $(which pip)"
     python --version
     
+    # Set ManiSkill environment variables in virtual environment
+    if [ -f "$VENV_DIR/bin/activate" ]; then
+        # Remove old settings if exist
+        sed -i '/^export MS_SKIP_ASSET_DOWNLOAD_PROMPT=/d' "$VENV_DIR/bin/activate"
+        sed -i '/^export MS_ASSET_DIR=/d' "$VENV_DIR/bin/activate"
+        sed -i '/^export MS_NO_NETWORK=/d' "$VENV_DIR/bin/activate"
+        # Add ManiSkill environment variables
+        echo "export MS_SKIP_ASSET_DOWNLOAD_PROMPT=1" >> "$VENV_DIR/bin/activate"
+        echo "export MS_NO_NETWORK=0" >> "$VENV_DIR/bin/activate"
+        # MS_ASSET_DIR will be set when assets are deployed
+        echo "Virtual environment: ManiSkill environment variables configured"
+    fi
+    
     # Upgrade pip, setuptools, wheel, uv in the virtual environment
     echo "Upgrading pip, setuptools, wheel, uv in virtual environment..."
     python -m pip install --upgrade pip setuptools wheel uv
@@ -189,17 +202,10 @@ print(f"{parts[0]}.{parts[1]}")
 EOF
 )
 
-    # Detect CUDA major, e.g. 12 from 12.4
-    local cuda_major
-    cuda_major=$(python - <<'EOF'
-import torch
-from packaging.version import Version
-v = Version(torch.version.cuda)
-print(v.base_version.split(".")[0])
-EOF
-)
-
-    local cu_tag="cu${cuda_major}"            # e.g. cu12
+    # Detect CUDA tag for flash-attention wheel
+    # Note: PyTorch may be compiled with cu118/cu121 for CUDA 12.1 compatibility,
+    # but flash-attention wheels use cu12 for all CUDA 12.x versions
+    local cu_tag=$(get_cuda_tag_for_flash_attn)
     local torch_tag="torch${torch_mm}"        # e.g. torch2.6
 
     # We currently assume cxx11 abi FALSE and linux x86_64
@@ -241,7 +247,7 @@ EOF
 
 install_common_embodied_deps() {
     uv pip install -e .[embodied]
-    bash $SCRIPT_DIR/embodied/sys_deps.sh
+    sudo bash $SCRIPT_DIR/embodied/sys_deps.sh
     
     add_env_var "NVIDIA_DRIVER_CAPABILITIES" "all"
     add_env_var "VK_DRIVER_FILES" "/etc/vulkan/icd.d/nvidia_icd.json"
@@ -354,6 +360,17 @@ install_maniskill_libero_env() {
 
     # Deploy ManiSkill assets (smart: uses local cache if available)
     deploy_maniskill_assets "$VENV_DIR"
+    # Ensure ManiSkill environment variables are set in the virtual environment
+    if [ -f "$VENV_DIR/bin/activate" ]; then
+        # Set MS_ASSET_DIR if deployed
+        if [ -n "${MS_ASSET_DIR:-}" ]; then
+            add_env_var "MS_ASSET_DIR" "$MS_ASSET_DIR"
+        fi
+        # Ensure MS_SKIP_ASSET_DOWNLOAD_PROMPT is set to avoid interactive prompts
+        add_env_var "MS_SKIP_ASSET_DOWNLOAD_PROMPT" "${MS_SKIP_ASSET_DOWNLOAD_PROMPT:-1}"
+        # Set MS_NO_NETWORK if needed to fail fast when assets are missing
+        add_env_var "MS_NO_NETWORK" "${MS_NO_NETWORK:-0}"
+    fi
 }
 
 install_behavior_env() {

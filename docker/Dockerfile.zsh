@@ -36,7 +36,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget unzip curl \
     zsh \
     openssh-client \
+    libvulkan1 mesa-vulkan-drivers vulkan-tools \
     && rm -rf /var/lib/apt/lists/*
+
+# Configure Vulkan ICD for NVIDIA
+RUN mkdir -p /etc/vulkan/icd.d && \
+    printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libGLX_nvidia.so.0",\n        "api_version": "1.3.194"\n    }\n}\n' > /etc/vulkan/icd.d/nvidia_icd.json
 
 # Configure pip mirror and upgrade
 RUN pip config set global.index-url https://mirrors.bfsu.edu.cn/pypi/web/simple
@@ -83,24 +88,20 @@ RUN http_proxy=${PROXY_URL} https_proxy=${PROXY_URL} \
 RUN mkdir -p ~/.ssh && \
     ssh-keygen -t ed25519 -C "${SSH_KEY_EMAIL}" -f ~/.ssh/id_ed25519 -N ""
 
-# Clone zsh plugins using HTTPS (with temporary proxy) for root
+# Clone zsh plugins using HTTPS (with temporary proxy via environment variables) for root
 RUN http_proxy=${PROXY_URL} https_proxy=${PROXY_URL} \
-    git config --global http.proxy ${PROXY_URL} && \
-    git config --global https.proxy ${PROXY_URL} && \
     ZSH=~/.oh-my-zsh && \
     mkdir -p $ZSH/custom/plugins && \
     git clone https://github.com/zsh-users/zsh-completions $ZSH/custom/plugins/zsh-completions && \
     git clone https://github.com/zsh-users/zsh-syntax-highlighting $ZSH/custom/plugins/zsh-syntax-highlighting && \
-    git clone https://github.com/zsh-users/zsh-autosuggestions $ZSH/custom/plugins/zsh-autosuggestions && \
-    git config --global --unset http.proxy && \
-    git config --global --unset https.proxy
+    git clone https://github.com/zsh-users/zsh-autosuggestions $ZSH/custom/plugins/zsh-autosuggestions
 
 # Configure zsh plugins and proxy alias for root
 RUN sed -i 's/plugins=(git)/plugins=(git zsh-completions zsh-syntax-highlighting zsh-autosuggestions z extract web-search)/' ~/.zshrc && \
     echo '' >> ~/.zshrc && \
     echo '# Proxy alias' >> ~/.zshrc && \
-    echo "alias proxy_en='export https_proxy=\"${PROXY_URL}\";export http_proxy=\"${PROXY_URL}\"'" >> ~/.zshrc && \
-    echo "alias proxy_dis='unset https_proxy;unset http_proxy'" >> ~/.zshrc
+    echo "alias proxy_en='export https_proxy=\"${PROXY_URL}\";export http_proxy=\"${PROXY_URL}\";git config --global http.proxy \"${PROXY_URL}\";git config --global https.proxy \"${PROXY_URL}\"'" >> ~/.zshrc && \
+    echo "alias proxy_dis='unset https_proxy;unset http_proxy;git config --global --unset http.proxy;git config --global --unset https.proxy'" >> ~/.zshrc
 
 # Copy root's oh-my-zsh, SSH, and zsh config to appuser
 RUN cp -r /root/.oh-my-zsh /home/appuser/.oh-my-zsh && \

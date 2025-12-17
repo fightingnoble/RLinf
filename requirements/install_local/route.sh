@@ -41,6 +41,35 @@ install_local_wheel_if_exists() {
     uv pip install "$local_wheel"
 }
 
+# Detect CUDA tag for flash-attention wheel
+# Flash-attention uses cu12 tag for all CUDA 12.x versions
+# Priority: CUDA_VARIANT env var > system CUDA > default cu12
+get_cuda_tag_for_flash_attn() {
+    local cu_tag="cu12"  # Default to cu12 (most common)
+    
+    if [ -n "${CUDA_VARIANT:-}" ]; then
+        # Extract CUDA major from CUDA_VARIANT (e.g., cuda124 -> 12, cuda121 -> 12)
+        if [[ "$CUDA_VARIANT" =~ cuda12 ]]; then
+            cu_tag="cu12"
+        elif [[ "$CUDA_VARIANT" =~ cuda11 ]]; then
+            cu_tag="cu11"
+        fi
+    else
+        # Try to detect from system CUDA
+        local system_cuda_major
+        system_cuda_major=$(nvcc --version 2>/dev/null | grep -oP 'release \K[0-9]+' | head -1 || echo "")
+        if [ -n "$system_cuda_major" ]; then
+            if [ "$system_cuda_major" = "12" ]; then
+                cu_tag="cu12"
+            elif [ "$system_cuda_major" = "11" ]; then
+                cu_tag="cu11"
+            fi
+        fi
+    fi
+    
+    echo "$cu_tag"
+}
+
 # Function to clone or copy from local
 clone_or_copy_repo() {
     local git_url="$1"
@@ -92,10 +121,31 @@ deploy_maniskill_assets() {
         echo "[install] Deploying ManiSkill assets from local cache: $local_assets_dir"
         
         # ManiSkill assets
-        export MS_ASSET_DIR="${target_dir}/.maniskill"
-        mkdir -p "$MS_ASSET_DIR"
-        cp -r "$local_assets_dir/.maniskill"/* "$MS_ASSET_DIR/"
-        echo "[install] ✓ ManiSkill assets deployed"
+        local ms_asset_dir="${target_dir}/.maniskill"
+        mkdir -p "$ms_asset_dir"
+        cp -r "$local_assets_dir/.maniskill"/* "$ms_asset_dir/"
+        echo "[install] ✓ ManiSkill assets deployed to $ms_asset_dir"
+        
+        # Set MS_ASSET_DIR environment variable
+        export MS_ASSET_DIR="$ms_asset_dir"
+        
+        # Persist MS_ASSET_DIR to virtual environment activate script
+        local venv_dir="${target_dir}"
+        if [ -f "${venv_dir}/bin/activate" ]; then
+            # Remove old MS_ASSET_DIR setting if exists
+            sed -i '/^export MS_ASSET_DIR=/d' "${venv_dir}/bin/activate"
+            # Add new setting with absolute path
+            local abs_ms_asset_dir
+            if [[ "$ms_asset_dir" == /* ]]; then
+                abs_ms_asset_dir="$ms_asset_dir"
+            else
+                abs_ms_asset_dir="$(cd "$(dirname "$ms_asset_dir")" && pwd)/$(basename "$ms_asset_dir")"
+            fi
+            echo "export MS_ASSET_DIR=\"${abs_ms_asset_dir}\"" >> "${venv_dir}/bin/activate"
+            echo "[install] ✓ MS_ASSET_DIR=$abs_ms_asset_dir added to virtual environment: ${venv_dir}/bin/activate"
+        else
+            echo "[install] ⚠ Warning: Virtual environment activate script not found at ${venv_dir}/bin/activate"
+        fi
         
         # SAPIEN PhysX assets
         export PHYSX_VERSION=105.1-physx-5.3.1.patch0
