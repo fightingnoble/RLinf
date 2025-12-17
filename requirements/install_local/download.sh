@@ -49,10 +49,10 @@ fi
 echo ""
 echo "=== Downloading Git Repositories ==="
 
-# Format: "repo_url target_dir [branch]"
+# Format: "repo_url target_dir [branch/tag]"
 REPOS=(
     "https://github.com/RLinf/latex2sympy2.git latex2sympy2"
-    "https://github.com/haosulab/ManiSkill.git ManiSkill"
+    "https://github.com/haosulab/ManiSkill.git ManiSkill v3.0.0b22"
     "https://github.com/RLinf/LIBERO.git LIBERO"
     "https://github.com/RLinf/BEHAVIOR-1K.git BEHAVIOR-1K RLinf/v3.7.1"
     "https://github.com/openvla/openvla.git openvla"
