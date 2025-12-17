@@ -547,11 +547,124 @@ class EmbodiedFSDPActor(FSDPModelManager, Worker):
         self.channel = self.connect_channel(cfg.actor.channel.name)
 
     def init_worker(self):
-        self.setup_model_and_optimizer()
-
-        if self.cfg.actor.get("enable_offload", False):
-            self.offload_param_and_grad()
-            self.offload_optimizer()
+        import logging
+        import traceback
+        
+        try:
+            import psutil
+            HAS_PSUTIL = True
+        except ImportError:
+            HAS_PSUTIL = False
+        
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # Log system resources before initialization
+            logger.info("=" * 80)
+            logger.info("Initializing EmbodiedFSDPActor worker")
+            logger.info("=" * 80)
+            
+            # Check CUDA availability
+            logger.info(f"CUDA available: {torch.cuda.is_available()}")
+            if torch.cuda.is_available():
+                logger.info(f"CUDA device count: {torch.cuda.device_count()}")
+                logger.info(f"Current CUDA device: {torch.cuda.current_device()}")
+                logger.info(f"CUDA device name: {torch.cuda.get_device_name()}")
+                logger.info(f"CUDA memory allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
+                logger.info(f"CUDA memory reserved: {torch.cuda.memory_reserved() / 1024**3:.2f} GB")
+            
+            # Check system memory (if psutil is available)
+            if HAS_PSUTIL:
+                process = psutil.Process()
+                mem_info = process.memory_info()
+                logger.info(f"Process RSS memory: {mem_info.rss / 1024**3:.2f} GB")
+                logger.info(f"Process VMS memory: {mem_info.vms / 1024**3:.2f} GB")
+                
+                # Check system-wide memory
+                sys_mem = psutil.virtual_memory()
+                logger.info(f"System total memory: {sys_mem.total / 1024**3:.2f} GB")
+                logger.info(f"System available memory: {sys_mem.available / 1024**3:.2f} GB")
+                logger.info(f"System memory percent: {sys_mem.percent}%")
+            else:
+                logger.info("psutil not available, skipping system memory check")
+            
+            # Check environment variables
+            logger.info(f"LOCAL_RANK: {os.environ.get('LOCAL_RANK', 'Not set')}")
+            logger.info(f"RANK: {os.environ.get('RANK', 'Not set')}")
+            logger.info(f"WORLD_SIZE: {os.environ.get('WORLD_SIZE', 'Not set')}")
+            
+            # Verify flash-attention if used
+            if self.cfg.actor.model.get("attn_implementation") == "flash_attention_2":
+                try:
+                    import flash_attn
+                    logger.info(f"Flash-attention version: {flash_attn.__version__}")
+                    logger.info("Flash-attention import successful")
+                except ImportError as e:
+                    logger.error(f"Flash-attention import failed: {e}")
+                    raise
+                except Exception as e:
+                    logger.warning(f"Flash-attention check failed: {e}")
+            
+            logger.info("Starting setup_model_and_optimizer()...")
+            self.setup_model_and_optimizer()
+            logger.info("setup_model_and_optimizer() completed successfully")
+            
+            if self.cfg.actor.get("enable_offload", False):
+                logger.info("Enabling parameter offload...")
+                self.offload_param_and_grad()
+                self.offload_optimizer()
+                logger.info("Parameter offload completed")
+            
+            # Log resources after initialization
+            if torch.cuda.is_available():
+                logger.info(f"CUDA memory allocated after init: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
+                logger.info(f"CUDA memory reserved after init: {torch.cuda.memory_reserved() / 1024**3:.2f} GB")
+            
+            if HAS_PSUTIL:
+                mem_info = process.memory_info()
+                logger.info(f"Process RSS memory after init: {mem_info.rss / 1024**3:.2f} GB")
+            
+            logger.info("=" * 80)
+            logger.info("EmbodiedFSDPActor worker initialized successfully")
+            logger.info("=" * 80)
+            
+        except torch.cuda.OutOfMemoryError as e:
+            logger.error("=" * 80)
+            logger.error("CUDA Out of Memory Error during worker initialization")
+            logger.error("=" * 80)
+            if torch.cuda.is_available():
+                logger.error(f"CUDA memory allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
+                logger.error(f"CUDA memory reserved: {torch.cuda.memory_reserved() / 1024**3:.2f} GB")
+                logger.error(f"CUDA max memory allocated: {torch.cuda.max_memory_allocated() / 1024**3:.2f} GB")
+            if HAS_PSUTIL:
+                sys_mem = psutil.virtual_memory()
+                logger.error(f"System available memory: {sys_mem.available / 1024**3:.2f} GB")
+            logger.error(f"Error: {e}")
+            logger.error(traceback.format_exc())
+            raise
+        except Exception as e:
+            logger.error("=" * 80)
+            logger.error("Error during worker initialization")
+            logger.error("=" * 80)
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Error message: {e}")
+            logger.error(traceback.format_exc())
+            
+            # Log current state
+            if torch.cuda.is_available():
+                logger.error(f"CUDA memory allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
+                logger.error(f"CUDA memory reserved: {torch.cuda.memory_reserved() / 1024**3:.2f} GB")
+            
+            if HAS_PSUTIL:
+                process = psutil.Process()
+                mem_info = process.memory_info()
+                logger.error(f"Process RSS memory: {mem_info.rss / 1024**3:.2f} GB")
+                
+                sys_mem = psutil.virtual_memory()
+                logger.error(f"System available memory: {sys_mem.available / 1024**3:.2f} GB")
+            
+            logger.error("=" * 80)
+            raise
 
     def model_provider_func(self):
         model = get_model(self.cfg.actor.checkpoint_load_path, self.cfg.actor.model)

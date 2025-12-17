@@ -125,5 +125,163 @@ Gloo 超时 / “Global rank x is not part of group”
 
 **修复：**
 
-- 确认所选 IP 能被其他节点访问（例如使用 ping 测试）。  
+- 确认所选 IP 能被其他节点访问（例如使用 ping 测试）。
 - 如有需要，请显式选择正确网卡对应的 IP 作为 Ray head，并将该 IP 告知各 Worker。
+
+------------------------------------
+
+Vulkan 兼容性错误：ErrorIncompatibleDriver
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**现象：** 运行 ManiSkill 环境时出现以下错误：
+
+.. code-block:: text
+
+   vk::createInstanceUnique: ErrorIncompatibleDriver
+   Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.
+   Failed to find glvnd ICD file.
+   Your GPU driver does not support Vulkan.
+
+**问题根源：**
+
+1. **缺少 Vulkan 系统库**：Docker 容器中未安装 Vulkan 运行时库（`libvulkan1`、`vulkan-tools` 等）。
+2. **Vulkan ICD 配置权限不足**：在运行 `sys_deps.sh` 时，由于权限问题，导致无法创建 Vulkan ICD 配置文件。
+
+**解决办法：**
+
+1. **安装 Vulkan 库**：在 Docker 构建时添加 Vulkan 包：
+
+   .. code-block:: dockerfile
+
+      RUN apt-get update && apt-get install -y --no-install-recommends \
+          libvulkan1 mesa-vulkan-drivers vulkan-tools
+
+2. **修复 ICD 配置权限**：
+   确保执行 ``sys_deps.sh`` 的用户有sudo权限创建 Vulkan ICD 配置文件。
+
+3. **可选：禁用渲染**：如果 Vulkan 问题持续存在，可以在训练配置中禁用渲染：
+
+   .. code-block:: yaml
+
+      env:
+        init_params:
+          render_mode: null  # 禁用渲染，仅进行物理仿真
+
+------------------------------------
+
+ManiSkill Assets 缺失错误
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**现象：** Ray worker 初始化时出现以下错误：
+
+.. code-block:: text
+
+   Environment PutCarrotOnPlateInScene-v2 requires asset(s) bridge_v2_real2sim which could not be found
+   RuntimeError: Simulator initialization failed: {'status': 'error', 'error': 'EOF when reading a line'}
+
+**问题根源：**
+
+1. **Assets 路径不匹配**：ManiSkill 默认查找用户目录 `~/.maniskill`，但 RLinf 将 assets 部署到虚拟环境目录 `.venv/.maniskill`。
+2. **环境变量未持久化**：`MS_ASSET_DIR` 环境变量没有写入虚拟环境激活脚本，导致 Ray worker 无法获取正确路径。
+3. **交互式下载阻塞**：`MS_SKIP_ASSET_DOWNLOAD_PROMPT` 未设置，导致尝试交互式下载 assets 时阻塞进程。
+
+**解决办法：**
+
+1. **检查 Assets 部署**：确保 `deploy_maniskill_assets` 函数正确执行，并设置了 `MS_ASSET_DIR`：
+
+   .. code-block:: bash
+
+      # 重新部署 assets（如果需要）
+      source requirements/install_local/route.sh
+      deploy_maniskill_assets .venv
+
+2. **验证环境变量**：激活虚拟环境后检查：
+
+   .. code-block:: bash
+
+      source .venv/bin/activate
+      echo $MS_ASSET_DIR  # 应显示绝对路径
+      echo $MS_SKIP_ASSET_DOWNLOAD_PROMPT  # 应为 1
+
+3. **手动设置（临时方案）**：如果自动设置失败，可以手动设置：
+
+   .. code-block:: bash
+
+      export MS_ASSET_DIR="/path/to/your/.venv/.maniskill"
+      export MS_SKIP_ASSET_DOWNLOAD_PROMPT=1
+      export MS_NO_NETWORK=0
+
+4. **重建虚拟环境**：如果问题持续，重新运行完整安装流程：
+
+   .. code-block:: bash
+
+      bash requirements/install_local_wrap.sh
+
+------------------------------------
+
+TimeLimitWrapper 属性错误：'TimeLimitWrapper' object has no attribute 'obs_mode'
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**现象：** Ray worker 初始化时出现以下错误：
+
+.. code-block:: text
+
+   Exception: 'TimeLimitWrapper' object has no attribute 'obs_mode'
+
+**问题根源：**
+
+ManiSkill 环境被 ``gym.wrappers.TimeLimit`` 包装后，环境对象变成了 ``TimeLimitWrapper`` 类型，而该 wrapper 没有 ``obs_mode`` 属性。在 RLinf 的代码中直接访问 ``self.env.obs_mode`` 时出错。
+
+**解决办法：**
+
+1. **修复代码访问**：修改 ``rlinf/envs/maniskill/maniskill_env.py`` 中的 ``_wrap_obs`` 方法：
+
+   .. code-block:: python
+
+      def _wrap_obs(self, raw_obs):
+          # Access obs_mode from unwrapped environment to handle TimeLimit wrapper
+          obs_mode = getattr(self.env.unwrapped, 'obs_mode', None)
+          if obs_mode == "state":
+              wrapped_obs = {"images": None, "task_description": None, "state": raw_obs}
+          else:
+              wrapped_obs = self._extract_obs_image(raw_obs)
+          return wrapped_obs
+
+2. **验证修复**：确保环境可以正常初始化和运行。
+
+3. **检查其他类似问题**：搜索代码中是否还有其他直接访问 wrapper 属性的地方。
+
+------------------------------------
+
+Tensor 类型错误：expected Tensor as element 0 in argument 0, but got NoneType
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**现象：** Ray worker 运行时出现以下错误：
+
+.. code-block:: text
+
+   Exception: expected Tensor as element 0 in argument 0, but got NoneType
+
+**问题根源：**
+
+动作处理函数 ``prepare_actions_for_maniskill`` 的参数传递错误，导致 ``action_scale`` 参数被传递了错误的类型（字符串而不是数字），进而导致 NumPy 计算失败，返回了 ``None`` 而不是期望的 Tensor。
+
+**解决办法：**
+
+1. **检查动作处理参数**：确保 ``prepare_actions`` 函数调用时正确传递了 ``action_scale`` 参数：
+
+   .. code-block:: python
+
+      chunk_actions = prepare_actions(
+          raw_chunk_actions=chunk_actions,
+          simulator_type=self.cfg.env.train.simulator_type,
+          model_name=self.cfg.actor.model.model_name,
+          num_action_chunks=self.cfg.actor.model.num_action_chunks,
+          action_dim=self.cfg.actor.model.action_dim,
+          action_scale=self.cfg.actor.model.get("action_scale", 1.0),  # 确保传递数字类型
+          policy=self.cfg.actor.model.get("policy_setup", None),
+      )
+
+2. **验证动作处理**：检查动作处理函数是否返回了有效的 Tensor。
+
+3. **检查配置文件**：确保 ``action_scale`` 在配置文件中是数字类型，而不是字符串。

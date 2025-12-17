@@ -125,7 +125,9 @@ class ManiskillEnv(gym.Env):
         ).to(self.device)
 
     def _wrap_obs(self, raw_obs):
-        if self.env.obs_mode == "state":
+        # Access obs_mode from unwrapped environment to handle TimeLimit wrapper
+        obs_mode = getattr(self.env.unwrapped, 'obs_mode', None)
+        if obs_mode == "state":
             wrapped_obs = {"images": None, "task_description": None, "state": raw_obs}
         else:
             wrapped_obs = self._extract_obs_image(raw_obs)

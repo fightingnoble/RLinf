@@ -136,6 +136,12 @@ setup_build_env() {
     export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
     mkdir -p "$HF_HOME"
     
+    # Fix for timm 0.9.10 compatibility with PyTorch 2.6.0
+    # timm 0.9.10 uses torch.jit.script which causes segmentation fault with PyTorch 2.6.0
+    export PYTORCH_JIT="${PYTORCH_JIT:-0}"
+    export TORCH_JIT="${TORCH_JIT:-0}"
+    export TORCH_DISABLE_JIT="${TORCH_DISABLE_JIT:-1}"
+    
     # ManiSkill Settings
     # Skip download prompts (auto-confirm downloads)
     export MS_SKIP_ASSET_DOWNLOAD_PROMPT="${MS_SKIP_ASSET_DOWNLOAD_PROMPT:-1}"

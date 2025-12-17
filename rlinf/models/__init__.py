@@ -15,7 +15,23 @@
 import json
 import os
 
+# Fix for timm 0.9.10 compatibility with PyTorch 2.6.0
+# timm 0.9.10 uses torch.jit.script which causes segmentation fault with PyTorch 2.6.0
+# Must be set before importing torch
+if "PYTORCH_JIT" not in os.environ:
+    os.environ["PYTORCH_JIT"] = "0"
+if "TORCH_JIT" not in os.environ:
+    os.environ["TORCH_JIT"] = "0"
+if "TORCH_DISABLE_JIT" not in os.environ:
+    os.environ["TORCH_DISABLE_JIT"] = "1"
+
 import torch
+
+# Disable JIT after torch import
+try:
+    torch.jit._state.enable = False
+except AttributeError:
+    pass  # JIT state may not be available in all PyTorch versions
 from omegaconf import DictConfig
 from transformers import (
     AutoConfig,
