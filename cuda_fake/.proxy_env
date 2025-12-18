@@ -1,0 +1,21 @@
+# Proxy Environment Configuration for RLinf Docker Container
+# This file is sourced when proxy environment variables are not detected
+
+# Default proxy settings (modify as needed)
+export HTTP_PROXY="http://222.29.97.81:1080"
+export HTTPS_PROXY="http://222.29.97.81:1080"
+export http_proxy="http://222.29.97.81:1080"
+export https_proxy="http://222.29.97.81:1080"
+
+# No proxy for local addresses
+export NO_PROXY="localhost,127.0.0.1,.local"
+export no_proxy="localhost,127.0.0.1,.local"
+
+# Git proxy configuration
+git config --global http.proxy "http://222.29.97.81:1080"
+git config --global https.proxy "http://222.29.97.81:1080"
+
+echo "🔗 Proxy environment configured:"
+echo "  HTTP_PROXY: $HTTP_PROXY"
+echo "  Git proxy: $(git config --global http.proxy)"
+
