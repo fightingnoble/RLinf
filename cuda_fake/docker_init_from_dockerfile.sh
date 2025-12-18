@@ -57,13 +57,41 @@ chmod 0440 /etc/sudoers.d/${APP_USER}
 # 添加到 docker 组（如果存在）
 (getent group docker >/dev/null || groupadd -r docker) && usermod -aG docker ${APP_USER} 2>/dev/null || true
 
-# 设置 zsh 为默认 shell
-echo "🐚 设置 zsh 为默认 shell..."
-chsh -s /bin/zsh
-if id -u ${APP_USER} > /dev/null 2>&1; then
-    chsh -s /bin/zsh ${APP_USER}
+
+# 添加link_assets到用户
+cat <<EOF > /usr/local/bin/link_assets
+#!/bin/bash
+if [ -d /opt/assets/.maniskill ]; then
+    if [ -d ~/.maniskill ]; then
+        rm -rf ~/.maniskill
+    fi
+    ln -s /opt/assets/.maniskill ~/.maniskill
 fi
-echo "✅ zsh 设置完成"
+if [ -d /opt/assets/.sapien ]; then
+    if [ -d ~/.sapien ]; then
+        rm -rf ~/.sapien
+    fi
+    ln -s /opt/assets/.sapien ~/.sapien
+fi
+mkdir -p ~/.cache
+if [ -d /opt/assets/.cache/openpi ]; then
+    if [ -d ~/.cache/openpi ]; then
+        rm -rf ~/.cache/openpi
+    fi
+    ln -s /opt/assets/.cache/openpi ~/.cache/openpi
+fi
+EOF
+chmod +x /usr/local/bin/link_assets
+
+# 生成 SSH 密钥
+echo "🔑 生成 SSH 密钥..."
+mkdir -p ~/.ssh
+if [ ! -f ~/.ssh/id_ed25519 ]; then
+    ssh-keygen -t ed25519 -C "${SSH_KEY_EMAIL}" -f ~/.ssh/id_ed25519 -N ""
+    echo "✅ SSH 密钥生成完成"
+else
+    echo "ℹ️  SSH 密钥已存在，跳过生成"
+fi
 
 # 配置 git
 echo "🔧 配置 git..."
@@ -75,6 +103,16 @@ if id -u ${APP_USER} > /dev/null 2>&1; then
 fi
 echo "✅ git 配置完成"
 
+
+# 设置 zsh 为默认 shell
+apt-get install -y zsh zip
+echo "🐚 设置 zsh 为默认 shell..."
+chsh -s /bin/zsh
+if id -u ${APP_USER} > /dev/null 2>&1; then
+    chsh -s /bin/zsh ${APP_USER}
+fi
+echo "✅ zsh 设置完成"
+
 # 安装 oh-my-zsh（使用代理）
 echo "🎨 安装 Oh My Zsh..."
 if [ ! -d '/root/.oh-my-zsh' ]; then
@@ -83,16 +121,6 @@ if [ ! -d '/root/.oh-my-zsh' ]; then
     echo "✅ Oh My Zsh 安装完成"
 else
     echo "ℹ️  Oh My Zsh 已存在，跳过安装"
-fi
-
-# 生成 SSH 密钥
-echo "🔑 生成 SSH 密钥..."
-mkdir -p ~/.ssh
-if [ ! -f ~/.ssh/id_ed25519 ]; then
-    ssh-keygen -t ed25519 -C "${SSH_KEY_EMAIL}" -f ~/.ssh/id_ed25519 -N ""
-    echo "✅ SSH 密钥生成完成"
-else
-    echo "ℹ️  SSH 密钥已存在，跳过生成"
 fi
 
 # 克隆 zsh 插件
@@ -109,16 +137,58 @@ done && echo "✅ zsh 插件安装完成"
 # 配置 zsh 插件和代理别名
 echo "⚙️  配置 zsh..."
 if [ -f ~/.zshrc ]; then
-    # 配置插件
-    sed -i 's/plugins=(git)/plugins=(git zsh-completions zsh-syntax-highlighting zsh-autosuggestions z extract web-search)/' ~/.zshrc
+    echo "ℹ️  .zshrc 已通过挂载提供，跳过配置修改"
+    echo "✅ zsh 配置已就绪"
+else
+    echo "⚠️  未找到 .zshrc 文件，创建基础配置..."
+    # 仅在没有挂载 .zshrc 时才创建基础配置
+    cat > ~/.zshrc << 'EOF'
+# Basic zsh configuration for RLinf Docker container
+export ZSH="/root/.oh-my-zsh"
 
-    # 添加代理别名
-    echo '' >> ~/.zshrc
-    echo '# Proxy alias' >> ~/.zshrc
-    echo "alias proxy_en='export https_proxy=\"${PROXY_URL}\";export http_proxy=\"${PROXY_URL}\";git config --global http.proxy \"${PROXY_URL}\";git config --global https.proxy \"${PROXY_URL}\"'" >> ~/.zshrc
-    echo "alias proxy_dis='unset https_proxy;unset http_proxy;git config --global --unset http.proxy;git config --global --unset https.proxy'" >> ~/.zshrc
+# Zsh plugins
+plugins=(git zsh-completions zsh-syntax-highlighting zsh-autosuggestions z extract web-search)
 
-    echo "✅ zsh 配置完成"
+# Load Oh My Zsh if available
+if [ -f $ZSH/oh-my-zsh.sh ]; then
+    source $ZSH/oh-my-zsh.sh
+fi
+
+# Environment variables
+export PATH="/opt/conda/bin:$PATH"
+export EDITOR="vim"
+export LANG=C.UTF-8
+
+# Git configuration
+git config --global --add safe.directory '*'
+
+# Proxy aliases
+alias proxy_en='export https_proxy="http://222.29.97.81:1080";export http_proxy="http://222.29.97.81:1080";git config --global http.proxy "http://222.29.97.81:1080";git config --global https.proxy "http://222.29.97.81:1080"'
+alias proxy_dis='unset https_proxy;unset http_proxy;git config --global --unset http.proxy;git config --global --unset https.proxy'
+
+# RLinf specific aliases
+alias cdrl='cd /root/git_repo/RLinf'
+alias cdhome='cd /root'
+alias gs='git status'
+alias ll='ls -alF'
+alias gpu_mem='nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader,nounits'
+
+# Python aliases
+alias python='python3'
+alias pip='python3 -m pip'
+
+echo "🎉 Welcome to RLinf Docker Container!"
+echo "💡 Useful commands:"
+echo "  cdrl     - Go to RLinf workspace (/root/git_repo/RLinf)"
+echo "  cdhome   - Go to home directory (/root)"
+echo "  gs       - Git status"
+echo "  ll       - Detailed file listing"
+echo "  gpu_mem  - Show GPU memory usage"
+echo "  proxy_en - Enable proxy"
+echo "  proxy_dis- Disable proxy"
+echo ""
+EOF
+    echo "✅ zsh 基础配置已创建"
 fi
 
 # 复制配置到用户
