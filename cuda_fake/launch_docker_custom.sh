@@ -84,35 +84,17 @@ docker run -it --gpus all \
     echo '✅ 初始化完成'
     echo ''
 
-    # 第二阶段：创建用户并切换身份
-    echo '👤 创建和配置用户...'
-
-    # 获取用户ID和组ID
-    USER_ID=\$(id -u)
-    GROUP_ID=\$(id -g)
+    # 第二阶段：切换到普通用户并启动 zsh
+    echo '🚀 切换到用户环境...'
     APP_USER=\${APP_USER:-appuser}
 
-    # 创建匹配主机的用户（如果不存在）
+    # 验证用户存在
     if ! id -u \${APP_USER} > /dev/null 2>&1; then
-        groupadd -g \${GROUP_ID} \${APP_USER} 2>/dev/null || true
-        useradd -m -u \${USER_ID} -g \${GROUP_ID} -s /bin/zsh \${APP_USER} 2>/dev/null || true
+        echo '❌ 用户 \${APP_USER} 不存在，无法切换身份'
+        echo '💡 请检查 docker_init_from_dockerfile.sh 是否正确执行'
+        exit 1
     fi
 
-    # 配置 sudo
-    mkdir -p /etc/sudoers.d
-    echo '\${APP_USER} ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/\${APP_USER}
-    chmod 0440 /etc/sudoers.d/\${APP_USER}
-
-    # 添加到 docker 组
-    (getent group docker >/dev/null || groupadd -r docker) && usermod -aG docker \${APP_USER} 2>/dev/null || true
-
-    # 设置工作目录权限
-    chown -R \${APP_USER}:\${APP_USER} /home/\${APP_USER} 2>/dev/null || true
-    echo '✅ 用户配置完成'
-    echo ''
-
-    # 第三阶段：切换到普通用户并启动 zsh
-    echo '🚀 切换到用户环境...'
     echo '💡 常用命令:'
     echo '  cdrl     - 进入 RLinf 工作目录'
     echo '  gs       - Git 状态'
