@@ -116,8 +116,40 @@ echo "✅ zsh 设置完成"
 # 安装 oh-my-zsh（使用代理）
 echo "🎨 安装 Oh My Zsh..."
 if [ ! -d '/root/.oh-my-zsh' ]; then
+    # 备份现有的 .zshrc（如果存在）
+    ZSHRC_BACKUP="/root/.zshrc.backup.$(date +%s)"
+    if [ -f ~/.zshrc ]; then
+        echo "📋 备份现有的 .zshrc 到 ${ZSHRC_BACKUP}"
+        cp ~/.zshrc "${ZSHRC_BACKUP}"
+    fi
+
+    # 安装 Oh My Zsh
     http_proxy=${PROXY_URL} https_proxy=${PROXY_URL} \
     sh -c "$(curl -fsSL https://install.ohmyz.sh/)" "" --unattended || true
+
+    # 如果安装成功且有备份，则恢复自定义配置
+    if [ -f "${ZSHRC_BACKUP}" ] && [ -f ~/.zshrc ]; then
+        echo "🔄 合并备份的配置到新的 .zshrc..."
+
+        # 在 Oh My Zsh 配置之后添加备份的内容（排除 Oh My Zsh 相关配置）
+        echo "" >> ~/.zshrc
+        echo "# Custom configuration from backup" >> ~/.zshrc
+        echo "# ==================================" >> ~/.zshrc
+
+        # 提取备份文件中的自定义配置（排除 Oh My Zsh 自动生成的行）
+        grep -v "^# If you come from bash you might have to change your" "${ZSHRC_BACKUP}" | \
+        grep -v "^export ZSH=" | \
+        grep -v "^ZSH_THEME=" | \
+        grep -v "^plugins=(" | \
+        grep -v "^source \$ZSH/oh-my-zsh.sh" | \
+        grep -v "^# .*oh-my-zsh" >> ~/.zshrc
+
+        echo "✅ 配置合并完成"
+    fi
+
+    # 清理备份文件
+    [ -f "${ZSHRC_BACKUP}" ] && rm -f "${ZSHRC_BACKUP}"
+
     echo "✅ Oh My Zsh 安装完成"
 else
     echo "ℹ️  Oh My Zsh 已存在，跳过安装"
@@ -134,62 +166,6 @@ for plugin in zsh-completions zsh-syntax-highlighting zsh-autosuggestions; do
     fi
 done && echo "✅ zsh 插件安装完成"
 
-# 配置 zsh 插件和代理别名
-echo "⚙️  配置 zsh..."
-if [ -f ~/.zshrc ]; then
-    echo "ℹ️  .zshrc 已通过挂载提供，跳过配置修改"
-    echo "✅ zsh 配置已就绪"
-else
-    echo "⚠️  未找到 .zshrc 文件，创建基础配置..."
-    # 仅在没有挂载 .zshrc 时才创建基础配置
-    cat > ~/.zshrc << 'EOF'
-# Basic zsh configuration for RLinf Docker container
-export ZSH="/root/.oh-my-zsh"
-
-# Zsh plugins
-plugins=(git zsh-completions zsh-syntax-highlighting zsh-autosuggestions z extract web-search)
-
-# Load Oh My Zsh if available
-if [ -f $ZSH/oh-my-zsh.sh ]; then
-    source $ZSH/oh-my-zsh.sh
-fi
-
-# Environment variables
-export PATH="/opt/conda/bin:$PATH"
-export EDITOR="vim"
-export LANG=C.UTF-8
-
-# Git configuration
-git config --global --add safe.directory '*'
-
-# Proxy aliases
-alias proxy_en='export https_proxy="http://222.29.97.81:1080";export http_proxy="http://222.29.97.81:1080";git config --global http.proxy "http://222.29.97.81:1080";git config --global https.proxy "http://222.29.97.81:1080"'
-alias proxy_dis='unset https_proxy;unset http_proxy;git config --global --unset http.proxy;git config --global --unset https.proxy'
-
-# RLinf specific aliases
-alias cdrl='cd /root/git_repo/RLinf'
-alias cdhome='cd /root'
-alias gs='git status'
-alias ll='ls -alF'
-alias gpu_mem='nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader,nounits'
-
-# Python aliases
-alias python='python3'
-alias pip='python3 -m pip'
-
-echo "🎉 Welcome to RLinf Docker Container!"
-echo "💡 Useful commands:"
-echo "  cdrl     - Go to RLinf workspace (/root/git_repo/RLinf)"
-echo "  cdhome   - Go to home directory (/root)"
-echo "  gs       - Git status"
-echo "  ll       - Detailed file listing"
-echo "  gpu_mem  - Show GPU memory usage"
-echo "  proxy_en - Enable proxy"
-echo "  proxy_dis- Disable proxy"
-echo ""
-EOF
-    echo "✅ zsh 基础配置已创建"
-fi
 
 # 复制配置到用户
 echo "📋 复制配置到用户..."
