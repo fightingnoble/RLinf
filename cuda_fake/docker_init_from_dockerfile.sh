@@ -129,22 +129,33 @@ if [ ! -d '/root/.oh-my-zsh' ]; then
 
     # 如果安装成功且有备份，则恢复自定义配置
     if [ -f "${ZSHRC_BACKUP}" ] && [ -f ~/.zshrc ]; then
-        echo "🔄 合并备份的配置到新的 .zshrc..."
+        echo "🔄 恢复备份的 .zshrc 配置..."
 
-        # 在 Oh My Zsh 配置之后添加备份的内容（排除 Oh My Zsh 相关配置）
+        # 备份当前的 Oh My Zsh 配置
+        cp ~/.zshrc ~/.zshrc.omz
+
+        # 用备份的配置替换当前的配置（保留用户自定义设置）
+        cp "${ZSHRC_BACKUP}" ~/.zshrc
+
+        # 在文件末尾添加 Oh My Zsh 加载（确保 Oh My Zsh 正常工作）
         echo "" >> ~/.zshrc
-        echo "# Custom configuration from backup" >> ~/.zshrc
-        echo "# ==================================" >> ~/.zshrc
+        echo "# Oh My Zsh configuration (added after custom config)" >> ~/.zshrc
+        echo "# ===================================================" >> ~/.zshrc
 
-        # 提取备份文件中的自定义配置（排除 Oh My Zsh 自动生成的行）
-        grep -v "^# If you come from bash you might have to change your" "${ZSHRC_BACKUP}" | \
-        grep -v "^export ZSH=" | \
-        grep -v "^ZSH_THEME=" | \
-        grep -v "^plugins=(" | \
-        grep -v "^source \$ZSH/oh-my-zsh.sh" | \
-        grep -v "^# .*oh-my-zsh" >> ~/.zshrc
+        # 从 Oh My Zsh 配置中提取必要的内容
+        if [ -f ~/.zshrc.omz ]; then
+            # 提取 Oh My Zsh 路径设置
+            grep "^export ZSH=" ~/.zshrc.omz >> ~/.zshrc 2>/dev/null || true
+            # 提取插件配置
+            grep "^plugins=(" ~/.zshrc.omz >> ~/.zshrc 2>/dev/null || true
+            # 提取 Oh My Zsh 加载命令
+            grep "^source \$ZSH/oh-my-zsh.sh" ~/.zshrc.omz >> ~/.zshrc 2>/dev/null || true
 
-        echo "✅ 配置合并完成"
+            # 清理临时文件
+            rm -f ~/.zshrc.omz
+        fi
+
+        echo "✅ 配置恢复完成"
     fi
 
     # 清理备份文件
