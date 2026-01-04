@@ -12,7 +12,25 @@ COMPAT_DIR="${TOOLKIT_DIR}/compat"
 
 # ===========================================
 
+# 参数解析
+CONTAINER_NAME=${1:-rlinf}
+IMAGE_NAME=${2:-docker.1ms.run/rlinf/rlinf:agentic-rlinf0.1-torch2.6.0-openvla-openvlaoft-pi0}
+APP_USER=${3:-root}
+
+if [ $# -lt 2 ]; then
+    echo "用法: $0 <容器名称> <镜像名称>"
+    echo "示例: $0 rlinf docker.1ms.run/rlinf/rlinf:agentic-rlinf0.1-torch2.6.0-openvla-openvlaoft-pi0"
+    echo ""
+    echo "当前默认值:"
+    echo "  容器名称: $CONTAINER_NAME"
+    echo "  镜像名称: $IMAGE_NAME"
+    echo "  用户名称: $APP_USER"
+    echo ""
+fi
+
 echo "=== RLinf Docker 容器启动 ==="
+echo "容器名称: $CONTAINER_NAME"
+echo "镜像名称: $IMAGE_NAME"
 
 # 检查 CUDA 伪装环境是否已准备好
 echo "🔍 检查 CUDA 伪装环境..."
@@ -39,45 +57,44 @@ echo "✅ CUDA 伪装环境检查通过"
 # ================= 启动 Docker 容器 =================
 echo ""
 echo "🚀 正在启动 Docker 容器..."
+SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+alias_path="${SCRIPT_DIR}/.alias"
 
-# 获取用户ID和组ID，用于权限映射
-USER_ID=$(id -u)
-GROUP_ID=$(id -g)
-
-# 检查是否可以访问代理相关的环境变量或配置文件
-if [ -f "$(pwd)/.proxy_env" ]; then
-    echo "  - 检测到代理配置文件: $(pwd)/.proxy_env"
-    PROXY_VARS="-e BASH_ENV=/root/.proxy_env"
+if [ -d "${alias_path}" ]; then
+    echo "alias_path: ${alias_path}"
+else
+    echo "alias_path: ${alias_path} 不存在"
+    exit 1
 fi
 
 docker run -it --gpus all \
+  --privileged \
   --shm-size 100g \
   --net=host \
-  --name rlinf \
+  --name $CONTAINER_NAME \
   -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics \
   -e NVIDIA_DISABLE_REQUIRE=true \
   -e USER=root \
   -e HOME=/root \
-  $PROXY_VARS \
+  -e APP_USER=$APP_USER \
   -v $(pwd):/root/git_repo/RLinf \
   -v /tmp:/tmp \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  -v $(pwd)/.zshrc:/root/.zshrc:ro \
-  -v $(pwd)/.proxy_env:/root/.proxy_env:ro \
+  --mount type=bind,source=${alias_path},target=/root/.alias \
   -w /root/git_repo/RLinf \
    -v ~/cuda-fake/cuda:/usr/local/cuda:ro \
    -v ~/cuda-fake/cuda-12.4:/usr/local/cuda-12.4:ro \
    -v ~/cuda-fake/ldcache/ld.so.conf:/etc/ld.so.conf.d/cuda-fake.conf:ro \
    -v ~/cuda-fake/cuda/lib64:/usr/local/cuda/lib64:ro \
-  docker.1ms.run/rlinf/rlinf:agentic-rlinf0.1-torch2.6.0-openvla-openvlaoft-pi0 \
+  $IMAGE_NAME \
   /bin/bash -c "
     echo '🎯 RLinf Docker 容器启动成功！'
     echo ''
 
     # 第一阶段：以 root 身份执行初始化脚本
     echo '🔧 执行初始化脚本...'
-    if [ -f '/root/git_repo/RLinf/docker_init_from_dockerfile.sh' ]; then
-        bash /root/git_repo/RLinf/docker_init_from_dockerfile.sh
+    if [ -f '/root/git_repo/RLinf/cuda_fake/docker_init_from_dockerfile.sh' ]; then
+        bash /root/git_repo/RLinf/cuda_fake/docker_init_from_dockerfile.sh
     else
         echo '⚠️  docker_init_from_dockerfile.sh 未找到，跳过初始化'
     fi
@@ -86,8 +103,6 @@ docker run -it --gpus all \
 
     # 第二阶段：切换到普通用户并启动 zsh
     echo '🚀 切换到用户环境...'
-    APP_USER=\${APP_USER:-appuser}
-
     # 验证用户存在
     if ! id -u \${APP_USER} > /dev/null 2>&1; then
         echo '❌ 用户 \${APP_USER} 不存在，无法切换身份'
@@ -101,8 +116,12 @@ docker run -it --gpus all \
     echo '  ll       - 详细文件列表'
     echo '  proxy_en - 启用代理'
     echo '  gpu_mem  - GPU 内存使用'
-    echo ''
 
     # 切换到用户并启动 zsh
     exec su - \${APP_USER} -c 'cd /root/git_repo/RLinf && exec /bin/zsh'
+    if [ "\${APP_USER}" != "root" ]; then
+        echo '🔗 重新链接资源...'
+        link_assets
+        ls -l ~/.maniskill && ls -l ~/.sapien && ls -l ~/.cache/openpi
+    fi
   "

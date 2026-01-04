@@ -29,6 +29,7 @@
   - `web-search`: 网页搜索别名
 - ✅ **代理支持**: 自动检测和配置
 - ✅ **Docker-in-Docker**: 支持容器内运行 Docker
+- ✅ **模块化配置**: 通过 `.alias` 目录实现配置模块化
 
 ### 文档合规
 - ✅ **NVIDIA_DRIVER_CAPABILITIES**: 启用完整 GPU 支持
@@ -39,15 +40,18 @@
 ## 📁 文件结构
 
 ```
-/path/to/RLinf/
-├── setup_cuda_drivers.sh   # CUDA 驱动环境设置脚本（一次性运行）
-├── setup_cuda_fake.sh      # Docker 容器启动脚本（推荐）
-├── launch_docker_custom.sh # Docker 容器启动脚本（自定义版本）
-├── docker_init.sh          # 容器内环境初始化脚本
-├── check_drivers.sh        # 驱动检查脚本
-├── .zshrc                  # Zsh 配置文件
-├── .proxy_env              # 代理配置文件
-└── DOCKER_SETUP_README.md  # 本说明文档
+cuda_fake/
+├── setup_cuda_drivers.sh        # CUDA 驱动环境设置脚本（一次性运行）
+├── setup_cuda_fake.sh           # Docker 容器启动脚本（推荐）
+├── launch_docker_custom.sh      # Docker 容器启动脚本（自定义版本）
+├── docker_init_from_dockerfile.sh # 容器内环境初始化脚本
+├── check_drivers.sh             # 驱动检查脚本
+├── test_separation.sh           # 测试脚本
+├── .alias/                      # 别名和配置目录
+│   ├── common.sh                # 通用别名和环境变量
+│   ├── proxy.sh                 # 代理相关函数
+│   └── rlinf_alias.sh           # RLinf 特定别名和函数
+└── DOCKER_SETUP_README.md       # 本说明文档
 ```
 
 ## 🛠️ 使用说明
@@ -66,23 +70,30 @@
 - **操作**: 检查环境，启动容器，自动安装zsh并初始化开发环境
 
 #### `launch_docker_custom.sh`
-- **用途**: 启动 RLinf Docker 容器的自定义版本
+- **用途**: 启动 RLinf Docker 容器的自定义版本，支持参数化配置
 - **前提**: 需要先运行 `setup_cuda_drivers.sh`
-- **操作**: 检查环境，启动容器，自动安装zsh和开发环境
+- **操作**: 检查环境，启动容器，支持自定义容器名、镜像名和用户名
+- **参数**: `[容器名] [镜像名] [用户名]` (均为可选)
+
+#### `docker_init_from_dockerfile.sh`
+- **用途**: 容器内环境初始化脚本
+- **操作**: 安装 zsh/oh-my-zsh/插件，配置用户环境，加载别名配置
+- **特点**: 基于 Dockerfile 逻辑的纯 shell 脚本实现
 
 ### 工作流程
 
 ```
 首次使用:
-1. ./setup_cuda_drivers.sh    # 设置 CUDA 环境（耗时，一次性）
-2. ./setup_cuda_fake.sh       # 启动容器并自动安装 zsh 环境
+1. ./setup_cuda_drivers.sh           # 设置 CUDA 环境（耗时，一次性）
+2. ./launch_docker_custom.sh         # 启动容器并自动初始化环境
 
 后续使用:
-1. ./setup_cuda_fake.sh       # 直接启动（快速，包含完整环境）
+1. ./launch_docker_custom.sh [容器名] [镜像名] [用户名]  # 直接启动（支持参数化）
 
 注意:
-- 容器会自动检测并安装 zsh（如果不存在）
+- 容器启动时会自动运行 docker_init_from_dockerfile.sh
 - Oh My Zsh 和插件会在首次运行时自动安装
+- 别名配置通过 .alias/ 目录下的文件自动加载
 - CUDA 环境设置只需运行一次
 ```
 
@@ -112,14 +123,28 @@ docker_init
 | `proxy_dis` | 禁用代理 |
 | `docker_init` | 手动运行初始化 |
 
+### 别名配置系统
+
+容器启动时会自动加载 `.alias/` 目录下的所有配置文件：
+
+#### `.alias/common.sh`
+- 通用别名：`python`, `pip`, `grep`, `egrep` 等
+- 环境变量：`PATH`, `EDITOR`, `LANG` 等
+- 系统设置：Git 配置、历史记录、补全等
+
+#### `.alias/proxy.sh`
+- 代理函数：`proxy_en()`, `proxy_dis()`
+- 自动设置 HTTP/HTTPS 代理和 Git 代理
+
+#### `.alias/rlinf_alias.sh`
+- RLinf 特定别名：`cdrl`, `gpu_mem` 等
+- 工具函数：`link_assets()` 等
+
 ### 代理配置
 
-代理设置会自动检测环境变量，如果没有检测到，会使用默认配置：
+代理设置通过函数调用，无需环境变量传递：
 
 ```bash
-# 默认代理
-http://222.29.97.81:1080
-
 # 启用代理
 proxy_en
 
@@ -204,9 +229,10 @@ docker_init
 
 #### 文件关系
 ```
-setup_cuda_drivers.sh → 创建 ~/cuda-fake/ 环境
-setup_cuda_fake.sh    → 使用 ~/cuda-fake/ 启动容器
-docker_init.sh        → 在容器内初始化开发环境
+setup_cuda_drivers.sh        → 创建 ~/cuda-fake/ 环境
+launch_docker_custom.sh      → 使用 ~/cuda-fake/ 启动容器，传递环境变量
+docker_init_from_dockerfile.sh → 在容器内初始化开发环境，加载 .alias 配置
+.alias/ 目录                 → 存放所有别名、函数和环境配置
 ```
 
 ### CUDA 伪装机制
@@ -224,12 +250,13 @@ docker_init.sh        → 在容器内初始化开发环境
 3. **创建伪装**: 构建驱动库软链接伪装层
 4. **配置缓存**: 设置动态链接库缓存
 
-#### 容器内（docker_init.sh）
-1. **检测**: 检查 Oh My Zsh 是否已安装
-2. **下载**: 使用代理（如果可用）下载 Oh My Zsh
-3. **插件安装**: 克隆必要的 zsh 插件
-4. **配置**: 更新 `.zshrc` 配置
-5. **标记**: 创建初始化完成标记
+#### 容器内（docker_init_from_dockerfile.sh）
+1. **代理配置**: 加载并启用代理设置
+2. **系统配置**: 设置 apt/pip 镜像，安装系统依赖
+3. **Zsh 环境**: 安装 Oh My Zsh 和插件
+4. **用户创建**: 创建与宿主机对应的用户账户
+5. **配置加载**: 自动加载 `.alias` 目录下的所有配置文件
+6. **环境设置**: 配置 Git、权限等开发环境
 
 ### 安全考虑
 
@@ -244,11 +271,11 @@ docker_init.sh        → 在容器内初始化开发环境
 如需修改配置，请编辑相应文件：
 
 - `setup_cuda_drivers.sh`: CUDA 驱动环境设置
-- `setup_cuda_fake.sh`: Docker 容器启动配置
-- `docker_init.sh`: 容器内环境初始化逻辑
-- `check_drivers.sh`: 驱动检查逻辑
-- `.zshrc`: Shell 配置
-- `.proxy_env`: 代理配置
+- `launch_docker_custom.sh`: Docker 容器启动配置
+- `docker_init_from_dockerfile.sh`: 容器内环境初始化逻辑
+- `.alias/common.sh`: 通用别名和环境变量
+- `.alias/proxy.sh`: 代理相关函数
+- `.alias/rlinf_alias.sh`: RLinf 特定别名和函数
 
 ### 开发建议
 

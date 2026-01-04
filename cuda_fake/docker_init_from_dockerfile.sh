@@ -7,13 +7,7 @@ set -e
 
 echo "=== 开始 RLinf Docker 初始化 ==="
 
-# 配置区域 - 与 Dockerfile 中的 ARG 对应
-PROXY_HOST="${PROXY_HOST:-222.29.97.81}"
-PROXY_PORT="${PROXY_PORT:-1080}"
-SSH_KEY_EMAIL="${SSH_KEY_EMAIL:-zhangchg@stu.pku.edu.cn}"
-NO_MIRROR="${NO_MIRROR:-}"
-APP_USER="${APP_USER:-appuser}"
-
+# ================= 环境变量设置 =================
 # 环境变量设置
 export PATH=/opt/conda/bin:$PATH
 export DEBIAN_FRONTEND=noninteractive
@@ -21,8 +15,8 @@ export DEBIAN_FRONTEND=noninteractive
 # 配置 apt 镜像（如果未设置 NO_MIRROR）
 echo "📦 配置 apt 镜像..."
 if [ -z "$NO_MIRROR" ]; then
-    sed -i 's@//.*archive.ubuntu.com@//mirrors.ustc.edu.cn@g' /etc/apt/sources.list
-    echo "✅ 已配置 USTC 镜像"
+    sed -i 's@//.*archive.ubuntu.com@//mirrors.bfsu.edu.cn@g' /etc/apt/sources.list
+    echo "✅ 已配置 BFSU 镜像"
 else
     echo "ℹ️  跳过 apt 镜像配置 (NO_MIRROR 已设置)"
 fi
@@ -32,135 +26,25 @@ echo "🐍 配置 pip 镜像..."
 pip config set global.index-url https://mirrors.bfsu.edu.cn/pypi/web/simple
 echo "✅ pip 配置完成"
 
-# 设置代理环境变量（用于临时构建）
-PROXY_URL="http://${PROXY_HOST}:${PROXY_PORT}"
-export PROXY_HOST=${PROXY_HOST}
-export PROXY_PORT=${PROXY_PORT}
-export PROXY_URL=${PROXY_URL}
 
-# 获取主机用户ID和组ID
-HOST_UID=$(id -u)
-HOST_GID=$(id -g)
 
-# 创建匹配主机的用户（如果不存在）
-echo "👤 配置用户..."
-if ! id -u ${APP_USER} > /dev/null 2>&1; then
-    groupadd -g ${HOST_GID} ${APP_USER} 2>/dev/null || true
-    useradd -m -u ${HOST_UID} -g ${HOST_GID} -s /bin/zsh ${APP_USER} 2>/dev/null || true
+# ================= 代理配置 =================
+# 启用代理（通过 .alias 中的 proxy_en）
+if [ -f /root/.alias/proxy.sh ]; then
+    source /root/.alias/proxy.sh
+    proxy_en
+    echo "✅ 已启用代理"
 fi
 
-# 配置 sudo
-mkdir -p /etc/sudoers.d
-echo "${APP_USER} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/${APP_USER}
-chmod 0440 /etc/sudoers.d/${APP_USER}
-
-# 添加到 docker 组（如果存在）
-(getent group docker >/dev/null || groupadd -r docker) && usermod -aG docker ${APP_USER} 2>/dev/null || true
-
-
-# 添加link_assets到用户
-cat <<EOF > /usr/local/bin/link_assets
-#!/bin/bash
-if [ -d /opt/assets/.maniskill ]; then
-    if [ -d ~/.maniskill ]; then
-        rm -rf ~/.maniskill
-    fi
-    ln -s /opt/assets/.maniskill ~/.maniskill
-fi
-if [ -d /opt/assets/.sapien ]; then
-    if [ -d ~/.sapien ]; then
-        rm -rf ~/.sapien
-    fi
-    ln -s /opt/assets/.sapien ~/.sapien
-fi
-mkdir -p ~/.cache
-if [ -d /opt/assets/.cache/openpi ]; then
-    if [ -d ~/.cache/openpi ]; then
-        rm -rf ~/.cache/openpi
-    fi
-    ln -s /opt/assets/.cache/openpi ~/.cache/openpi
-fi
-EOF
-chmod +x /usr/local/bin/link_assets
-
-# 生成 SSH 密钥
-echo "🔑 生成 SSH 密钥..."
-mkdir -p ~/.ssh
-if [ ! -f ~/.ssh/id_ed25519 ]; then
-    ssh-keygen -t ed25519 -C "${SSH_KEY_EMAIL}" -f ~/.ssh/id_ed25519 -N ""
-    echo "✅ SSH 密钥生成完成"
-else
-    echo "ℹ️  SSH 密钥已存在，跳过生成"
-fi
-
-# 配置 git
-echo "🔧 配置 git..."
-git config --global --add safe.directory '*'
-
-# 为用户也配置 git
-if id -u ${APP_USER} > /dev/null 2>&1; then
-    su - ${APP_USER} -c "git config --global --add safe.directory '*'" 2>/dev/null || true
-fi
-echo "✅ git 配置完成"
-
-
+# ================= zsh 配置 =================
 # 设置 zsh 为默认 shell
-apt-get install -y zsh zip
-echo "🐚 设置 zsh 为默认 shell..."
+apt-get update
+apt-get install zsh -y
 chsh -s /bin/zsh
-if id -u ${APP_USER} > /dev/null 2>&1; then
-    chsh -s /bin/zsh ${APP_USER}
-fi
-echo "✅ zsh 设置完成"
 
 # 安装 oh-my-zsh（使用代理）
-echo "🎨 安装 Oh My Zsh..."
-if [ ! -d '/root/.oh-my-zsh' ]; then
-    # 备份现有的 .zshrc（如果存在）
-    ZSHRC_BACKUP="/root/.zshrc.backup.$(date +%s)"
-    if [ -f ~/.zshrc ]; then
-        echo "📋 备份现有的 .zshrc 到 ${ZSHRC_BACKUP}"
-        cp ~/.zshrc "${ZSHRC_BACKUP}"
-    fi
-
-    # 安装 Oh My Zsh
-    http_proxy=${PROXY_URL} https_proxy=${PROXY_URL} \
+if [ ! -d '~/.oh-my-zsh' ]; then
     sh -c "$(curl -fsSL https://install.ohmyz.sh/)" "" --unattended || true
-
-    # 如果安装成功且有备份，则恢复自定义配置
-    if [ -f "${ZSHRC_BACKUP}" ] && [ -f ~/.zshrc ]; then
-        echo "🔄 恢复备份的 .zshrc 配置..."
-
-        # 备份当前的 Oh My Zsh 配置
-        cp ~/.zshrc ~/.zshrc.omz
-
-        # 用备份的配置替换当前的配置（保留用户自定义设置）
-        cp "${ZSHRC_BACKUP}" ~/.zshrc
-
-        # 在文件末尾添加 Oh My Zsh 加载（确保 Oh My Zsh 正常工作）
-        echo "" >> ~/.zshrc
-        echo "# Oh My Zsh configuration (added after custom config)" >> ~/.zshrc
-        echo "# ===================================================" >> ~/.zshrc
-
-        # 从 Oh My Zsh 配置中提取必要的内容
-        if [ -f ~/.zshrc.omz ]; then
-            # 提取 Oh My Zsh 路径设置
-            grep "^export ZSH=" ~/.zshrc.omz >> ~/.zshrc 2>/dev/null || true
-            # 提取插件配置
-            grep "^plugins=(" ~/.zshrc.omz >> ~/.zshrc 2>/dev/null || true
-            # 提取 Oh My Zsh 加载命令
-            grep "^source \$ZSH/oh-my-zsh.sh" ~/.zshrc.omz >> ~/.zshrc 2>/dev/null || true
-
-            # 清理临时文件
-            rm -f ~/.zshrc.omz
-        fi
-
-        echo "✅ 配置恢复完成"
-    fi
-
-    # 清理备份文件
-    [ -f "${ZSHRC_BACKUP}" ] && rm -f "${ZSHRC_BACKUP}"
-
     echo "✅ Oh My Zsh 安装完成"
 else
     echo "ℹ️  Oh My Zsh 已存在，跳过安装"
@@ -172,20 +56,64 @@ ZSH=~/.oh-my-zsh
 mkdir -p $ZSH/custom/plugins && \
 for plugin in zsh-completions zsh-syntax-highlighting zsh-autosuggestions; do
     if [ ! -d "$ZSH/custom/plugins/$plugin" ]; then
-        http_proxy=${PROXY_URL} https_proxy=${PROXY_URL} \
         git clone https://github.com/zsh-users/$plugin $ZSH/custom/plugins/$plugin
     fi
 done && echo "✅ zsh 插件安装完成"
 
+# Configure zsh plugins for root
+sed -i 's/plugins=(git)/plugins=(git zsh-completions zsh-syntax-highlighting zsh-autosuggestions z extract web-search)/' ~/.zshrc
 
-# 复制配置到用户
-echo "📋 复制配置到用户..."
-if id -u ${APP_USER} > /dev/null 2>&1; then
+# Source .alias files for root
+if [ -d /root/.alias ]; then
+    echo "" >> /root/.zshrc
+    echo "# Source aliases from .alias directory" >> /root/.zshrc
+    echo "if [ -d /root/.alias ]; then" >> /root/.zshrc
+    echo "    for alias_file in /root/.alias/*.sh; do" >> /root/.zshrc
+    echo "        if [ -f \"\$alias_file\" ]; then" >> /root/.zshrc
+    echo "            source \"\$alias_file\"" >> /root/.zshrc
+    echo "        fi" >> /root/.zshrc
+    echo "    done" >> /root/.zshrc
+    echo "fi" >> /root/.zshrc
+fi
+
+# ================= git 配置 =================
+
+# 配置 git
+echo "🔧 配置 git..."
+git config --global --add safe.directory '*'
+
+# ================= 用户配置 =================
+# if APP_USER is not root, then create user
+if [ "$APP_USER" != "root" ]; then
+
+    # 获取主机用户ID和组ID
+    HOST_UID=$(id -u)
+    HOST_GID=$(id -g)
+
+    # 创建匹配主机的用户（如果不存在）
+    echo "👤 配置用户${APP_USER}..."
+
+    # 复制配置到用户
+    if id -u ${APP_USER} > /dev/null 2>&1; then
+        groupadd -g ${HOST_GID} ${APP_USER} 2>/dev/null || true
+        useradd -m -u ${HOST_UID} -g ${HOST_GID} -s /bin/zsh ${APP_USER} 2>/dev/null || true
+    fi 
+
+    # 配置 sudo
+    mkdir -p /etc/sudoers.d
+    echo "${APP_USER} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/${APP_USER}
+    chmod 0440 /etc/sudoers.d/${APP_USER}
+
+    # 添加到 docker 组（如果存在）
+    (getent group docker >/dev/null || groupadd -r docker) && usermod -aG docker ${APP_USER} 2>/dev/null || true
+    chsh -s /bin/zsh ${APP_USER}
+    su - ${APP_USER} -c "git config --global --add safe.directory '*'" 2>/dev/null || true
     if [ -d /root/.oh-my-zsh ]; then
         cp -r /root/.oh-my-zsh /home/${APP_USER}/.oh-my-zsh 2>/dev/null || true
         chown -R ${APP_USER}:${APP_USER} /home/${APP_USER}/.oh-my-zsh 2>/dev/null || true
     fi
 
+    echo "📋 复制配置到用户..."
     if [ -d /root/.ssh ]; then
         cp -r /root/.ssh /home/${APP_USER}/.ssh 2>/dev/null || true
         chown -R ${APP_USER}:${APP_USER} /home/${APP_USER}/.ssh 2>/dev/null || true
@@ -200,13 +128,22 @@ if id -u ${APP_USER} > /dev/null 2>&1; then
     fi
 
     echo "✅ 配置复制完成"
+    echo "💡 接下来将切换到 ${APP_USER} 并启动 zsh 环境"
 else
-    echo "ℹ️  ${APP_USER} 不存在，跳过配置复制"
+    echo "ℹ️  using default user root"
 fi
 
 # 设置环境变量
 export UMASK=0002
+apt install -y software-properties-common
+sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub
+sudo add-apt-repository "deb https://developer.download.nvidia.com/devtools/repos/ubuntu$(source /etc/lsb-release; echo "$DISTRIB_RELEASE" | tr -d .)/$(dpkg --print-architecture)/ /"
+sudo apt install nsight-systems-2025.5.2
+apt-get install libvulkan1 mesa-vulkan-drivers vulkan-tools -y
 
-echo "🎉 RLinf Docker 初始化完成！"
+pip install PyOpenGL-accelerate
+export PATH="/usr/local/bin:$PATH"
+echo "🎉 Docker 初始化完成！"
 echo ""
-echo "💡 接下来将切换到 ${APP_USER} 并启动 zsh 环境"
+
+
