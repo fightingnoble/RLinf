@@ -1,0 +1,133 @@
+# RLinf Profiling Configuration Example
+# 复制此文件并根据需要调整参数
+#
+# 使用方式：
+# 1. 复制为 profiling_config.yaml: cp profiling_config.example.yaml profiling_config.yaml
+# 2. 根据需要修改参数
+# 3. 在命令行中使用: runner.profiling_config=path/to/your/config.yaml
+
+profiling:
+  # 选择分析工具: none, nvtx, torch
+  # - nvtx: 用于 Nsight Systems GPU 分析
+  # - torch: 用于 PyTorch Profiler (TensorBoard)
+  # - none: 禁用 profiling
+  tool: "nvtx"
+  
+  # 指定要 profile 的训练步数 (global steps)
+  # 例如: [10, 20, 30] 表示仅在第 10、20、30 步进行 profiling
+  steps: [10, 20, 30]
+  
+  # 是否连续 profiling
+  # - false (推荐): 每个 step 独立开始和停止 (生成 len(steps) 个 .nsys-rep 文件)
+  #   例如 steps=[10,20,30] 生成 3 个文件
+  # - true: 连续 step 合并到一个 trace 中，减少文件数量但增加单文件大小
+  #   例如 steps=[10,11,12,20] 生成 2 个文件：[10-12] 和 [20]
+  continuous: false
+
+  # NVTX 配置 (配合 Nsight Systems 使用)
+  nvtx:
+    # 是否启用 Domain 区分，便于在 Nsight 中过滤和识别不同组件
+    domain_enabled:
+      rlinf.env: true       # 环境交互 (绿色)
+      rlinf.rollout: true   # 策略推理 (蓝色)
+      rlinf.actor: true     # 模型训练 (红色)
+
+  # PyTorch Profiler 配置 (当 tool="torch" 时使用)
+  torch:
+    save_path: "./profiling"
+    record_shapes: true
+    profile_memory: true
+    with_stack: false
+
+  # Nsight Systems 配置
+  nsight:
+    # True: 每个任务有独立的数据库 (更细粒度，但文件更多)
+    # False: 一个训练步中的所有任务共享一个数据库 (推荐)
+    discrete: false
+
+    # Controller (Driver 进程) Nvidia Nsight Systems 选项
+    # 这些参数对应 run_embodiment_profiling.sh 中的 nsys profile 命令
+    controller_nsight_options:
+      # 选择要追踪的 API
+      # cuda: CUDA API 调用
+      # nvtx: NVTX 标记
+      # osrt: 操作系统运行时
+      # vulkan: Vulkan API (环境渲染)
+      # cudnn: cuDNN 库调用
+      # cublas: cuBLAS 库调用
+      # ucx: UCX 通信库 (多节点)
+      trace: "cuda,nvtx,osrt,vulkan,cudnn,cublas,ucx"
+
+      # 追踪 GPU 内存使用情况（必须是字符串类型 "true" 或 "false"）
+      cuda-memory-usage: "true"
+
+      # CUDA graphs 追踪模式
+      # "node": 每个节点单独追踪 (更详细)
+      # "graph": 整个图作为一个整体追踪 (推荐，开销更小)
+      cuda-graph-trace: "graph"
+
+      # GPU metrics 设备选择
+      gpu-metrics-devices: "all"
+
+      # 启用 CUDA backtrace，帮助定位 CUDA API 调用来源
+      cudabacktrace: "true"
+
+    # Worker (Ray Actor) Nvidia Nsight Systems 选项
+    # 这些参数通过 Ray 的 runtime_env 传递给分布式 worker
+    worker_nsight_options:
+      # 选择要追踪的 API (与 controller 保持一致)
+      trace: "cuda,nvtx,osrt,vulkan,cudnn,cublas,ucx"
+
+      # 追踪 GPU 内存使用情况
+      cuda-memory-usage: "true"
+
+      # CUDA graphs 追踪模式
+      cuda-graph-trace: "graph"
+
+      # 仅在 torch.cuda.profiler.start 和 stop 范围内 profiling
+      # ⚠️ 不要修改此配置，必须与代码中的 cudaProfilerApi 配合使用
+      capture-range: "cudaProfilerApi"
+
+      # 指定 capture range 结束时的行为
+      # verl/RLinf 需要 torch.cuda.profiler.start/stop 对重复 n 次
+      # 有效值:
+      #   - "repeat-shutdown:n": 重复 n 次后自动关闭
+      #   - null: 自动计算为 len(steps) * 6 (推荐)
+      # 
+      # 计算规则:
+      #   - 正常的整步 profiling: n = len(steps)
+      #   - discrete profiling: n = len(steps) * 子任务数量
+      capture-range-end: null
+
+      # 不强制终止目标应用程序进程组
+      # "none": 让程序自己退出 (推荐)
+      # "signal:SIGTERM": 发送 SIGTERM 信号
+      kill: "none"
+
+# ============================================================
+# 配置示例
+# ============================================================
+
+# 场景 1: 快速调试 (单步 profiling)
+# profiling:
+#   tool: "nvtx"
+#   steps: [5]
+#   continuous: false
+
+# 场景 2: 长时间连续 profiling (捕获完整训练流程)
+# profiling:
+#   tool: "nvtx"
+#   steps: [10, 50]  # 从第 10 步到第 50 步
+#   continuous: true
+
+# 场景 3: PyTorch Profiler (用于 TensorBoard 分析)
+# profiling:
+#   tool: "torch"
+#   steps: [10, 20, 30]
+#   continuous: false
+#   torch:
+#     save_path: "./logs/profiling"
+
+# 场景 4: 禁用 profiling
+# profiling:
+#   tool: "none"

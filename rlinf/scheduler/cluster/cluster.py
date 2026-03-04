@@ -390,6 +390,7 @@ class Cluster:
         node_group_label: str,
         cls_args: tuple,
         cls_kwargs: dict,
+        nsight_options: Optional[dict] = None,
     ) -> ActorHandle:
         """Allocate a ray remote class instance on a specific node and local rank.
 
@@ -402,6 +403,7 @@ class Cluster:
             node_group_label (str): The label of the node group to allocate on.
             cls_args (tuple): Positional arguments to pass to the class constructor.
             cls_kwargs (dict): Keyword arguments to pass to the class constructor.
+            nsight_options (Optional[dict]): Nsight options to set for the worker.
 
         Returns:
             ray.ObjectRef: A reference to the allocated remote class instance.
@@ -429,11 +431,15 @@ class Cluster:
         if cfg_python_path is not None:
             python_interpreter_path = cfg_python_path
 
+        runtime_env = {
+            "py_executable": python_interpreter_path,
+            "env_vars": merged_env_vars,
+        }
+        if nsight_options is not None:
+            runtime_env["nsight"] = nsight_options
+
         options = {
-            "runtime_env": {
-                "py_executable": python_interpreter_path,
-                "env_vars": merged_env_vars,
-            },
+            "runtime_env": runtime_env,
             "name": worker_name,
             "scheduling_strategy": ray.util.scheduling_strategies.NodeAffinitySchedulingStrategy(
                 node_id=node.ray_id,

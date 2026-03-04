@@ -63,6 +63,12 @@ class WorkerGroup(Generic[WorkerClsType]):
         self._execution_ranks = None
 
         self._data_io_ranks = None
+        self._nsight_options = None
+
+    def with_nsight(self, nsight_options: dict):
+        """Configure nsight options for the worker group."""
+        self._nsight_options = nsight_options
+        return self
 
     @property
     def worker_cls_name(self) -> str:
@@ -210,6 +216,7 @@ class WorkerGroup(Generic[WorkerClsType]):
                 node_group_label=placement.node_group_label,
                 cls_args=self._worker_cls_args,
                 cls_kwargs=self._worker_cls_kwargs,
+                nsight_options=self._nsight_options,
             )
 
             @dataclass

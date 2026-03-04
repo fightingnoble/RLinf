@@ -15,10 +15,13 @@ hydra:
 cluster:
   num_nodes: 1
   component_placement:
-    actor,env,rollout: 0-1
+    actor: 0-3
+    env,rollout: 2-3
 
 runner:
   task_type: embodied
+  enable_profiling: False
+  profiling_config: null
   logger:
     log_path: "../results"
     project_name: rlinf
@@ -122,7 +125,7 @@ rollout:
   pipeline_stage_num: 2
 
   model:
-    model_path: "/path/to/model/openvla-7b-rlvla-warmup/"
+    model_path: "workspace/models/openvla-7b-rlvla-warmup"
     precision: ${actor.model.precision}
 
 actor:
@@ -133,20 +136,20 @@ actor:
     queue_size: 0
   training_backend: "fsdp"
 
-  micro_batch_size: 20
+  micro_batch_size: 2
   global_batch_size: 160
   seed: 1234
   enable_offload: True
 
   # Override the default values in model/openvla
   model:
-    model_path: "/path/to/model/openvla-7b-rlvla-warmup/"
+    model_path: "workspace/models/openvla-7b-rlvla-warmup"
     add_value_head: True
     is_lora: True
 
   tokenizer:
     tokenizer_type: "HuggingFaceTokenizer"
-    tokenizer_model: "/path/to/model/openvla-7b-rlvla-warmup/"
+    tokenizer_model: "workspace/models/openvla-7b-rlvla-warmup"
     extra_vocab_size: 421
     use_fast: False
     trust_remote_code: True

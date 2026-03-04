@@ -25,6 +25,7 @@ from rlinf.models import get_model, get_vla_model_config_and_processor
 from rlinf.scheduler import Cluster, Worker
 from rlinf.utils.metric_utils import compute_split_num
 from rlinf.utils.placement import HybridComponentPlacement
+from rlinf.utils.profiler_utils import profiling_range
 
 
 class MultiStepRolloutWorker(Worker):
@@ -101,6 +102,7 @@ class MultiStepRolloutWorker(Worker):
             "max_new_tokens": self._length_params["max_new_token"],
         }
 
+    @profiling_range("predict_action", domain="rlinf.rollout")
     def predict(self, env_obs, mode="train"):
         kwargs = (
             self._train_sampling_params
@@ -163,6 +165,7 @@ class MultiStepRolloutWorker(Worker):
 
         return dones, rewards
 
+    @profiling_range("sync_model_from_actor", domain="rlinf.rollout")
     def sync_model_from_actor(self):
         """Sync model parameters from the actor worker."""
         param_state_dict = self.recv(self.actor_group_name, src_rank=self._rank)
@@ -172,6 +175,7 @@ class MultiStepRolloutWorker(Worker):
         gc.collect()
         torch.cuda.empty_cache()
 
+    @profiling_range("rollout_generate", domain="rlinf.rollout")
     def generate(self):
         if self.enable_offload:
             self.reload_model()
@@ -196,7 +200,9 @@ class MultiStepRolloutWorker(Worker):
                     env_output = self.recv_env_output()
 
                     dones, rewards = self.get_dones_and_rewards(env_output)
+
                     actions, result = self.predict(env_output["obs"])
+
                     chunk_step_result = ChunkStepResult(
                         prev_logprobs=result["prev_logprobs"],
                         prev_values=result["prev_values"],
@@ -231,6 +237,7 @@ class MultiStepRolloutWorker(Worker):
         if self.enable_offload:
             self.offload_model()
 
+    @profiling_range("rollout_evaluate", domain="rlinf.rollout")
     def evaluate(self):
         if self.enable_offload:
             self.reload_model()
@@ -261,18 +268,21 @@ class MultiStepRolloutWorker(Worker):
     def reload_model(self):
         self.hf_model = self.hf_model.to(self.device)
 
+    @profiling_range("recv_env_output", domain="rlinf.rollout")
     def recv_env_output(self):
         env_output = self.channel.get(
             key=f"{self._obs_queue_name}_{self._rank}",
         )
         return env_output
 
+    @profiling_range("send_chunk_actions", domain="rlinf.rollout")
     def send_chunk_actions(self, chunk_actions):
         self.channel.put(
             item=chunk_actions,
             key=f"{self._action_queue_name}_{self._rank}",
         )
 
+    @profiling_range("send_rollout_batch", domain="rlinf.rollout")
     def send_rollout_batch(self, stage_id):
         # send rollout_batch to actor
         send_num = self.placement.get_world_size("rollout") * self.num_pipeline_stages

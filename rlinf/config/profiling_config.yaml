@@ -1,0 +1,76 @@
+# RLinf Profiling Configuration
+# 独立于训练配置，便于单独调整profiling参数
+#
+# 使用方式：
+# 1. 设置 tool 为 nvtx, torch 或 none
+# 2. 设置 steps 列表指定要 profile 的步数
+# 3. 在命令行中使用: runner.profiling_config=path/to/your/config.yaml
+
+profiling:
+  # 选择分析工具: none, nvtx, torch
+  tool: "nvtx"
+  
+  # 指定要 profile 的训练步数 (global steps)
+  steps: [0]
+  
+  # 是否连续 profiling
+  # - false (推荐): 每个 step 独立开始和停止 (生成 len(steps) 个 .nsys-rep 文件)
+  #   例如 steps=[10,20,30] 生成 3 个文件
+  # - true: 连续 step 合并到一个 trace 中，减少文件数量但增加单文件大小
+  #   例如 steps=[10,11,12,20] 生成 2 个文件：[10-12] 和 [20]
+  continuous: false
+
+  # NVTX 配置 (配合 Nsight Systems)
+  nvtx:
+    # 是否启用 Domain 区分 (rlinf.env, rlinf.rollout, rlinf.actor)
+    domain_enabled:
+      rlinf.env: true
+      rlinf.rollout: true
+      rlinf.actor: true
+
+  # PyTorch Profiler 配置
+  torch:
+    save_path: "./profiling"
+    record_shapes: true
+    profile_memory: true
+    with_stack: false
+
+  # Nsight Systems 配置
+  nsight:
+    # True: 每个任务有独立的数据库
+    # False: 一个训练步中的所有任务共享一个数据库
+    discrete: false
+
+
+    # Worker (Ray Actor) Nvidia Nsight Systems 选项
+    # 这些参数通过 Ray runtime_env 传递给 worker
+    worker_nsight_options:
+      # 选择要追踪的 API
+      # nsys runs automatically in a single process mode (--run-agent-in-process=true). 
+      # Illegal --trace argument ' vulkan'
+      trace: "cuda,nvtx,cublas,cudnn,osrt,vulkan"
+
+      # 延迟启动采集 (单位: 秒)
+      # 建议设置为足够覆盖 init_worker 时间的值 (例如 60-90秒)
+      delay: 2
+
+      # 追踪 GPU 内存使用情况（必须是字符串类型）
+      cuda-memory-usage: "true"
+
+      # CUDA graphs 追踪模式
+      cuda-graph-trace: "graph"
+
+      # 仅在 torch.cuda.profiler.start 和 stop 范围内 profiling
+      # 不要修改此配置，必须与代码中的 cudaProfilerApi 配合使用
+      capture-range: "cudaProfilerApi"
+
+      # 指定 capture range 结束时的行为
+      # verl 中需要 torch.cuda.profiler.start/stop 对重复 n 次
+      # 有效值: "repeat-shutdown:n" 或 null
+      # - 正常的整步 profiling: n = len(profile_steps)
+      # - discrete profiling: n = len(profile_steps) * 子任务数量
+      # - null: 程序将自动使用 n = len(profile_steps) * 6
+      capture-range-end: null
+
+      # 不强制终止目标应用程序进程组，让程序自己退出
+      kill: "none"

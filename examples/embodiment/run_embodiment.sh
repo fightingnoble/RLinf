@@ -21,6 +21,9 @@ export ISAAC_PATH=${ISAAC_PATH:-/path/to/isaac-sim}
 export EXP_PATH=${EXP_PATH:-$ISAAC_PATH/apps}
 export CARB_APP_PATH=${CARB_APP_PATH:-$ISAAC_PATH/kit}
 
+# Profiling configuration
+export PROFILER_MODE="record_function"
+CONFIG_FILE="${REPO_PATH}/rlinf/config/profiling_config.yaml"
 
 if [ -z "$1" ]; then
     CONFIG_NAME="maniskill_ppo_openvlaoft"
@@ -29,9 +32,18 @@ else
 fi
 
 echo "Using Python at $(which python)"
-LOG_DIR="${REPO_PATH}/logs/$(date +'%Y%m%d-%H:%M:%S')" #/$(date +'%Y%m%d-%H:%M:%S')"
+LOG_DIR="${REPO_PATH}/logs/$(date +'%Y%m%d-%H:%M:%S')"
 MEGA_LOG_FILE="${LOG_DIR}/run_embodiment.log"
 mkdir -p "${LOG_DIR}"
-CMD="python ${SRC_FILE} --config-path ${EMBODIED_PATH}/config/ --config-name ${CONFIG_NAME} runner.logger.log_path=${LOG_DIR}"
+
+# Build the training command with PyTorch Profiler enabled
+CMD="python ${SRC_FILE} \
+    --config-path ${EMBODIED_PATH}/config/ \
+    --config-name ${CONFIG_NAME} \
+    runner.logger.log_path=${LOG_DIR} \
+    ++runner.enable_profiling=True \
+    ++runner.profiling_config=${CONFIG_FILE}"
+
+echo "Command: ${CMD}"
 echo ${CMD} > ${MEGA_LOG_FILE}
 ${CMD} 2>&1 | tee -a ${MEGA_LOG_FILE}

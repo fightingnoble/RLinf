@@ -17,3 +17,7 @@ outputs/*
 .venv
 uv.lock
 rlinf/envs/maniskill/assets
+docker/torch-2.6/repos
+workspace
+*.patched
+.cursor

@@ -25,6 +25,7 @@ from rlinf.envs.action_utils import prepare_actions
 from rlinf.envs.env_manager import EnvManager
 from rlinf.scheduler import Cluster, Worker
 from rlinf.utils.placement import HybridComponentPlacement
+from rlinf.utils.profiler_utils import profiling_range
 
 
 class EnvWorker(Worker):
@@ -127,6 +128,7 @@ class EnvWorker(Worker):
                 self.last_dones_list.append(dones)
                 self.simulator_list[i].stop_simulator()
 
+    @profiling_range("env_step", domain="rlinf.env")
     def env_interact_step(
         self, chunk_actions: torch.Tensor, stage_id: int
     ) -> tuple[EnvOutput, dict[str, Any]]:
@@ -212,6 +214,7 @@ class EnvWorker(Worker):
         )
         return env_output, env_info
 
+    @profiling_range("recv_chunk_actions", domain="rlinf.env")
     def recv_chunk_actions(self):
         chunk_action = []
         for gather_id in range(self.gather_num):
@@ -269,6 +272,7 @@ class EnvWorker(Worker):
                 env_batch_i[key] = value
         return env_batch_i
 
+    @profiling_range("send_env_batch", domain="rlinf.env")
     def send_env_batch(self, env_batch, mode="train"):
         # split env_batch into num_processes chunks, each chunk contains gather_num env_batch
         for gather_id in range(self.gather_num):
@@ -278,6 +282,7 @@ class EnvWorker(Worker):
                 key=f"{self._obs_queue_name}_{gather_id + self._rank * self.gather_num}",
             )
 
+    @profiling_range("env_interact", domain="rlinf.env")
     def interact(self):
         for simulator in self.simulator_list:
             simulator.start_simulator()
@@ -354,6 +359,7 @@ class EnvWorker(Worker):
 
         return env_metrics
 
+    @profiling_range("env_evaluate", domain="rlinf.env")
     def evaluate(self):
         eval_metrics = defaultdict(list)
 

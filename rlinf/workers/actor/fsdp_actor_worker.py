@@ -47,6 +47,7 @@ from rlinf.utils.placement import (
     HybridComponentPlacement,
     ModelParallelComponentPlacement,
 )
+from rlinf.utils.profiler_utils import profiling_range, profiling_ctx
 from rlinf.utils.utils import (
     clear_memory,
     compute_logprobs_from_logits,
@@ -133,6 +134,7 @@ class FSDPActor(FSDPModelManager, Worker):
         if hasattr(self, "rollout_state_dict"):
             del self.rollout_state_dict
 
+    @profiling_range("sync_model_to_rollout", domain="rlinf.actor")
     def sync_model_to_rollout(self) -> None:
         if self.cfg.actor.get("enable_offload", False):
             self.offload_optimizer()
@@ -170,6 +172,7 @@ class FSDPActor(FSDPModelManager, Worker):
         self.model.eval()
         self.rollout_batch["logprob"] = self.rollout_batch["prev_logprobs"]
 
+    @profiling_range("get_batch", domain="rlinf.actor")
     def get_batch(
         self, channel: Channel
     ) -> tuple[dict[str, torch.Tensor], RolloutResult]:
@@ -290,6 +293,7 @@ class FSDPActor(FSDPModelManager, Worker):
             f"Expected {self.total_batch_size_per_dp} sequences from channel, but got {recv_batch_size}"
         )
 
+    @profiling_range("actor_training", domain="rlinf.actor")
     def run_training(self, input_channel: Channel) -> tuple[dict, list]:
         # Get all batches for this DP
         batches = []
@@ -373,14 +377,15 @@ class FSDPActor(FSDPModelManager, Worker):
                         ref_logprobs = m_batch["ref_logprobs"]
 
                     loss_mask = m_batch["attention_mask"][:, -self.response_len :]
-                    with self.amp_context:
-                        output = self.model(
-                            input_ids=input_ids,
-                            attention_mask=attention_mask,
-                            position_ids=position_ids,
-                            **multi_modal_inputs,
-                            use_cache=False,
-                        )
+                    with profiling_ctx("forward_pass", domain="rlinf.actor"):
+                        with self.amp_context:
+                            output = self.model(
+                                input_ids=input_ids,
+                                attention_mask=attention_mask,
+                                position_ids=position_ids,
+                                **multi_modal_inputs,
+                                use_cache=False,
+                            )
 
                     logits = output.logits
 
@@ -448,8 +453,9 @@ class FSDPActor(FSDPModelManager, Worker):
                     # add to log
                     # scale loss for gradient accumulation and backprop
                     loss = loss / self.gradient_accumulation
-                    with backward_ctx:
-                        self.grad_scaler.scale(loss).backward()
+                    with profiling_ctx("backward_pass", domain="rlinf.actor"):
+                        with backward_ctx:
+                            self.grad_scaler.scale(loss).backward()
 
                     mbs_metrics_data.update(
                         {
@@ -487,6 +493,7 @@ class FSDPActor(FSDPModelManager, Worker):
         return rollout_metrics, training_metrics_list
 
     # Advantages and returns
+    @profiling_range("compute_adv_and_returns", domain="rlinf.actor")
     def compute_advantages_and_returns(self, batch: dict[str, torch.Tensor]):
         """Compute the advantages and returns.
 
@@ -560,6 +567,7 @@ class EmbodiedFSDPActor(FSDPModelManager, Worker):
             return model
         return super().model_provider_func()
 
+    @profiling_range("sync_model_to_rollout", domain="rlinf.actor")
     def sync_model_to_rollout(self):
         if self.cfg.actor.get("enable_offload", False):
             self.offload_optimizer()
@@ -577,6 +585,7 @@ class EmbodiedFSDPActor(FSDPModelManager, Worker):
         if self.cfg.actor.get("enable_offload", False):
             self.offload_param_and_grad()
 
+    @profiling_range("recv_rollout_batch", domain="rlinf.actor")
     async def recv_rollout_batch(self) -> None:
         """
         Receive rollout batch from rollout workers.
@@ -691,6 +700,7 @@ class EmbodiedFSDPActor(FSDPModelManager, Worker):
         self.model.eval()
         self.rollout_batch["logprob"] = self.rollout_batch["prev_logprobs"]
 
+    @profiling_range("compute_adv_and_returns", domain="rlinf.actor")
     def compute_advantages_and_returns(self):
         kwargs = {
             "task_type": self.cfg.runner.task_type,
@@ -717,6 +727,7 @@ class EmbodiedFSDPActor(FSDPModelManager, Worker):
         rollout_metrics = compute_rollout_metrics(self.rollout_batch)
         return rollout_metrics
 
+    @profiling_range("actor_training", domain="rlinf.actor")
     def run_training(self):
         if self.cfg.actor.get("enable_offload", False):
             self.load_param_and_grad(self.device)
@@ -812,14 +823,15 @@ class EmbodiedFSDPActor(FSDPModelManager, Worker):
                         True if self.cfg.algorithm.adv_type == "gae" else False
                     )
 
-                    with self.amp_context:
-                        output_dict = self.model(
-                            data=data,
-                            compute_logprobs=True,
-                            compute_entropy=self.cfg.algorithm.entropy_bonus > 0,
-                            compute_values=compute_values,
-                            use_cache=False,
-                        )
+                    with profiling_ctx("forward_pass", domain="rlinf.actor"):
+                        with self.amp_context:
+                            output_dict = self.model(
+                                data=data,
+                                compute_logprobs=True,
+                                compute_entropy=self.cfg.algorithm.entropy_bonus > 0,
+                                compute_values=compute_values,
+                                use_cache=False,
+                            )
 
                     if SupportedModel(self.cfg.actor.model.model_type) in [
                         SupportedModel.GR00T
@@ -867,8 +879,9 @@ class EmbodiedFSDPActor(FSDPModelManager, Worker):
                     metrics_data["entropy_loss"] = entropy_loss.detach().item()
 
                     loss /= self.gradient_accumulation
-                    with backward_ctx:
-                        self.grad_scaler.scale(loss).backward()
+                    with profiling_ctx("backward_pass", domain="rlinf.actor"):
+                        with backward_ctx:
+                            self.grad_scaler.scale(loss).backward()
 
                     metrics_data["loss"] = loss.detach().item()
                     append_to_dict(metrics, metrics_data)

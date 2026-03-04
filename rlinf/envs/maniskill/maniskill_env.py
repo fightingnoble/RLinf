@@ -130,7 +130,7 @@ class ManiskillEnv(gym.Env):
         ).to(self.device)
 
     def _wrap_obs(self, raw_obs):
-        if self.env.obs_mode == "state":
+        if self.env.get_wrapper_attr('obs_mode') == "state":
             wrapped_obs = {"states": raw_obs}
         else:
             wrapped_obs = self._extract_obs_image(raw_obs)
